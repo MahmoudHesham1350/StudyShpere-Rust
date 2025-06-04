@@ -1,0 +1,20 @@
+{
+  "bundles": {
+    "project-189": {
+      "name": "project",
+      "created": "2025-06-04T12:21:09.058Z",
+      "lastUsed": "2025-06-04T13:03:13.522Z",
+      "tags": [],
+      "files": [
+        "migrations",
+        "src",
+        "target",
+        ".env",
+        ".env.example",
+        ".gitignore",
+        "Cargo.lock",
+        "Cargo.toml"
+      ]
+    }
+  }
+}

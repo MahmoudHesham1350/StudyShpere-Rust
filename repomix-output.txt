@@ -1,0 +1,2176 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+================================================================
+File Summary
+================================================================
+
+Purpose:
+--------
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+File Format:
+------------
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
+
+Usage Guidelines:
+-----------------
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+Notes:
+------
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: migrations, src, target, .env, .env.example, .gitignore, Cargo.lock, Cargo.toml
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+
+
+================================================================
+Directory Structure
+================================================================
+migrations/
+  20250604094927_create_users_table.sql
+  20250604094959_create_groups_table.sql
+  20250604095032_create_group_members_table.sql
+  20250604095053_create_courses_table.sql
+  20250604095239_create_join_requests_table.sql
+  20250604103839_create_materials_table.sql
+  20250604104053_create_material_labels_table.sql
+  20250604104118_create_comments_table.sql
+src/
+  db/
+    mod.rs
+  errors/
+    mod.rs
+  handlers/
+    course.rs
+    group_member.rs
+    group.rs
+    join_request.rs
+    material.rs
+    mod.rs
+  models/
+    comment.rs
+    course.rs
+    group.rs
+    group_member.rs
+    group.rs
+    join_request.rs
+    material.rs
+    material_label.rs
+    material.rs
+    mod.rs
+    user.rs
+  routes/
+    course.rs
+    group_member.rs
+    group.rs
+    join_request.rs
+    material.rs
+    mod.rs
+  main.rs
+.env.example
+.gitignore
+Cargo.toml
+
+================================================================
+Files
+================================================================
+
+================
+File: migrations/20250604094927_create_users_table.sql
+================
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    username VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+================
+File: migrations/20250604094959_create_groups_table.sql
+================
+CREATE TABLE groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL REFERENCES users(id),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    join_type VARCHAR(50) NOT NULL,
+    post_permission VARCHAR(50) NOT NULL,
+    edit_permissions VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+================
+File: migrations/20250604095032_create_group_members_table.sql
+================
+CREATE TABLE group_members (
+    user_id UUID NOT NULL REFERENCES users(id),
+    group_id UUID NOT NULL REFERENCES groups(id),
+    user_role VARCHAR(50) NOT NULL,
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (user_id, group_id)
+);
+
+================
+File: migrations/20250604095053_create_courses_table.sql
+================
+CREATE TABLE courses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES groups(id),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+================
+File: migrations/20250604095239_create_join_requests_table.sql
+================
+CREATE TABLE join_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES groups(id),
+    user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+================
+File: migrations/20250604103839_create_materials_table.sql
+================
+CREATE TABLE materials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    file VARCHAR(255),
+    url VARCHAR(255),
+    type VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    owner_id UUID NOT NULL REFERENCES users(id),
+    course_id UUID NOT NULL REFERENCES courses(id)
+);
+
+================
+File: migrations/20250604104053_create_material_labels_table.sql
+================
+CREATE TABLE material_labels (
+    material_id UUID NOT NULL REFERENCES materials(id),
+    label_id UUID NOT NULL, -- Assuming a 'labels' table will be created later
+    number INTEGER NOT NULL,
+    PRIMARY KEY (material_id, label_id)
+);
+
+================
+File: migrations/20250604104118_create_comments_table.sql
+================
+CREATE TABLE comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    material_id UUID NOT NULL REFERENCES materials(id),
+    user_id UUID NOT NULL REFERENCES users(id),
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+================
+File: src/db/mod.rs
+================
+use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::time::Duration;
+use anyhow::Result;
+
+pub async fn init_db_pool() -> Result<PgPool> {
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")?;
+
+    let pool = PgPoolOptions::new()
+        .max_connections(10)
+        .min_connections(5)
+        .acquire_timeout(Duration::from_secs(30))
+        .connect(&database_url)
+        .await?;
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await?;
+
+    Ok(pool)
+}
+
+================
+File: src/errors/mod.rs
+================
+// src/errors/mod.rs
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde_json::json;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Database error: {0}")]
+    SqlxError(#[from] sqlx::Error),
+    #[error("Migration error: {0}")]
+    MigrationError(#[from] sqlx::migrate::MigrateError),
+    #[error("Not found")]
+    NotFound,
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error("Forbidden")]
+    Forbidden,
+    #[error("Anyhow error: {0}")]
+    Anyhow(#[from] anyhow::Error),
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match self {
+            AppError::SqlxError(e) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e))
+            }
+            AppError::MigrationError(e) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Migration error: {}", e))
+            }
+            AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found".to_string()),
+            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
+            AppError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden".to_string()),
+            AppError::Anyhow(e) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Internal server error: {}", e))
+            }
+        };
+
+        let body = Json(json!({
+            "error": error_message,
+        }));
+
+        (status, body).into_response()
+    }
+}
+
+================
+File: src/handlers/course.rs
+================
+// src/handlers/course.rs
+use axum::{
+    extract::{State, Json, Path},
+    http::StatusCode,
+};
+use sqlx::{Pool, Postgres};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+
+use crate::{
+    errors::AppError,
+    models::group::{Group, Course, NewCourse},
+};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CourseResponse {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<Course> for CourseResponse {
+    fn from(course: Course) -> Self {
+        CourseResponse {
+            id: course.id,
+            group_id: course.group_id,
+            name: course.name,
+            description: course.description,
+            created_at: course.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateCoursePayload {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateCoursePayload {
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
+pub async fn list_courses_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(group_id): Path<Uuid>,
+) -> Result<Json<Vec<CourseResponse>>, AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let courses = Course::find_by_group_id(&pool, group_id).await?;
+    let responses: Vec<CourseResponse> = courses.into_iter().map(Into::into).collect();
+    Ok(Json(responses))
+}
+
+pub async fn create_course_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(group_id): Path<Uuid>,
+    Json(payload): Json<CreateCoursePayload>,
+) -> Result<(StatusCode, Json<CourseResponse>), AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let new_course = NewCourse {
+        group_id,
+        name: payload.name,
+        description: payload.description,
+    };
+
+    let course = Course::create(&pool, new_course).await?;
+    Ok((StatusCode::CREATED, Json(course.into())))
+}
+
+pub async fn get_course_detail_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(course_id): Path<Uuid>,
+) -> Result<Json<CourseResponse>, AppError> {
+    let course = Course::find_by_id(&pool, course_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok(Json(course.into()))
+}
+
+pub async fn update_course_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(course_id): Path<Uuid>,
+    Json(payload): Json<UpdateCoursePayload>,
+) -> Result<Json<CourseResponse>, AppError> {
+    let mut course = Course::find_by_id(&pool, course_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    if let Some(name) = payload.name {
+        course.name = name;
+    }
+    if let Some(description) = payload.description {
+        course.description = Some(description);
+    }
+
+    let updated_course = Course::update(&pool, course).await?;
+    Ok(Json(updated_course.into()))
+}
+
+pub async fn delete_course_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(course_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let _course = Course::find_by_id(&pool, course_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    Course::delete(&pool, course_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+================
+File: src/handlers/group_member.rs
+================
+// src/handlers/group_member.rs
+use axum::{
+    extract::{State, Json, Path},
+    http::StatusCode,
+};
+use sqlx::{Pool, Postgres};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+
+use crate::{
+    errors::AppError,
+    models::group::{Group, GroupMember},
+    models::user::User,
+};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserResponseForGroupMember {
+    pub id: Uuid,
+    pub username: String,
+}
+
+impl From<User> for UserResponseForGroupMember {
+    fn from(user: User) -> Self {
+        UserResponseForGroupMember {
+            id: user.id,
+            username: user.username,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GroupMemberResponse {
+    pub user: UserResponseForGroupMember,
+    pub user_role: String,
+    pub joined_at: DateTime<Utc>,
+}
+
+impl GroupMemberResponse {
+    pub async fn from_group_member(pool: &Pool<Postgres>, group_member: GroupMember) -> Result<Self, AppError> {
+        let user = User::find_by_id(pool, group_member.user_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+
+        Ok(GroupMemberResponse {
+            user: user.into(),
+            user_role: group_member.user_role,
+            joined_at: group_member.joined_at,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateGroupMemberPayload {
+    pub user_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateGroupMemberPayload {
+    pub user_role: String,
+}
+
+pub async fn list_group_members_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(group_id): Path<Uuid>,
+) -> Result<Json<Vec<GroupMemberResponse>>, AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let group_members = GroupMember::find_by_group_id(&pool, group_id).await?;
+    let mut responses = Vec::new();
+    for gm in group_members {
+        responses.push(GroupMemberResponse::from_group_member(&pool, gm).await?);
+    }
+    Ok(Json(responses))
+}
+
+pub async fn create_group_member_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(group_id): Path<Uuid>,
+    Json(payload): Json<CreateGroupMemberPayload>,
+) -> Result<(StatusCode, Json<GroupMemberResponse>), AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let user = User::find_by_id(&pool, payload.user_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let new_group_member = GroupMember {
+        user_id: payload.user_id,
+        group_id,
+        user_role: "member".to_string(), // Default role
+        joined_at: Utc::now(),
+    };
+
+    let group_member = GroupMember::create(&pool, new_group_member).await?;
+    let response = GroupMemberResponse::from_group_member(&pool, group_member).await?;
+
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub async fn get_group_member_detail_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path((group_id, user_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<GroupMemberResponse>, AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let group_member = GroupMember::find_by_user_and_group_id(&pool, user_id, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    Ok(Json(GroupMemberResponse::from_group_member(&pool, group_member).await?))
+}
+
+pub async fn update_group_member_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path((group_id, user_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<UpdateGroupMemberPayload>,
+) -> Result<Json<GroupMemberResponse>, AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let mut group_member = GroupMember::find_by_user_and_group_id(&pool, user_id, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    group_member.user_role = payload.user_role;
+
+    let updated_group_member = GroupMember::update(&pool, group_member).await?;
+
+    Ok(Json(GroupMemberResponse::from_group_member(&pool, updated_group_member).await?))
+}
+
+pub async fn delete_group_member_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path((group_id, user_id)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let _group_member = GroupMember::find_by_user_and_group_id(&pool, user_id, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    GroupMember::delete(&pool, user_id, group_id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// Handler for /api/groups/<uuid:group_id>/members/self/
+pub async fn get_self_group_membership_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(group_id): Path<Uuid>,
+    // TODO: Extract authenticated user ID here
+) -> Result<Json<GroupMemberResponse>, AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Placeholder for authenticated user ID
+    let current_user_id = Uuid::new_v4(); // Replace with actual authenticated user ID
+
+    let group_member = GroupMember::find_by_user_and_group_id(&pool, current_user_id, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    Ok(Json(GroupMemberResponse::from_group_member(&pool, group_member).await?))
+}
+
+pub async fn leave_group_membership_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(group_id): Path<Uuid>,
+    // TODO: Extract authenticated user ID here
+) -> Result<StatusCode, AppError> {
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Placeholder for authenticated user ID
+    let current_user_id = Uuid::new_v4(); // Replace with actual authenticated user ID
+
+    let _group_member = GroupMember::find_by_user_and_group_id(&pool, current_user_id, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    GroupMember::delete(&pool, current_user_id, group_id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+================
+File: src/handlers/group.rs
+================
+// src/handlers/group.rs
+use axum::{
+    extract::{State, Json},
+    http::StatusCode,
+};
+use sqlx::{Pool, Postgres};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+
+use crate::{
+    errors::AppError,
+    models::group::{Group, NewGroup},
+};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateGroupRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GroupResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<Group> for GroupResponse {
+    fn from(group: Group) -> Self {
+        GroupResponse {
+            id: group.id,
+            name: group.name,
+            description: group.description,
+            created_at: group.created_at,
+        }
+    }
+}
+
+pub async fn create_group_handler(
+    State(pool): State<Pool<Postgres>>,
+    Json(payload): Json<CreateGroupRequest>,
+) -> Result<(StatusCode, Json<GroupResponse>), AppError> {
+    let new_group = NewGroup {
+        name: payload.name,
+        description: payload.description,
+        owner_id: Uuid::new_v4(), // Placeholder for now, will be replaced with actual user ID
+    };
+
+    let group = Group::create(&pool, new_group).await?;
+
+    Ok((StatusCode::CREATED, Json(group.into())))
+}
+
+pub async fn list_groups_handler(
+    State(pool): State<Pool<Postgres>>,
+) -> Result<Json<Vec<GroupResponse>>, AppError> {
+    let groups = Group::find_all(&pool).await?;
+    let group_responses: Vec<GroupResponse> = groups.into_iter().map(Into::into).collect();
+    Ok(Json(group_responses))
+}
+
+================
+File: src/handlers/join_request.rs
+================
+// src/handlers/join_request.rs
+use axum::{
+    extract::{State, Json, Path},
+    http::StatusCode,
+};
+use sqlx::{Pool, Postgres};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+
+use crate::{
+    errors::AppError,
+    models::group::{JoinRequest, Group}, // Assuming Group model is needed for validation
+    models::user::User, // Assuming User model is needed for response
+};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserResponseForJoinRequest {
+    pub id: Uuid,
+    pub username: String,
+}
+
+impl From<User> for UserResponseForJoinRequest {
+    fn from(user: User) -> Self {
+        UserResponseForJoinRequest {
+            id: user.id,
+            username: user.username,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JoinRequestResponse {
+    pub user: UserResponseForJoinRequest,
+    pub created_at: DateTime<Utc>,
+}
+
+impl JoinRequestResponse {
+    pub async fn from_join_request(pool: &Pool<Postgres>, join_request: JoinRequest) -> Result<Self, AppError> {
+        let user = User::find_by_id(pool, join_request.user_id)
+            .await?
+            .ok_or(AppError::NotFound)?; // User not found for join request
+
+        Ok(JoinRequestResponse {
+            user: user.into(),
+            created_at: join_request.created_at,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateJoinRequestPayload {
+    pub user_id: Uuid, // This will likely come from authenticated user in real implementation
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RespondToJoinRequestPayload {
+    pub action: String, // "accept" or "decline"
+}
+
+#[derive(Debug, Serialize)]
+pub struct MessageResponse {
+    pub message: String,
+}
+
+pub async fn list_join_requests_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(group_id): Path<Uuid>,
+) -> Result<Json<Vec<JoinRequestResponse>>, AppError> {
+    // Check if group exists (optional, but good practice)
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let join_requests = JoinRequest::find_by_group_id(&pool, group_id).await?;
+    let mut responses = Vec::new();
+    for jr in join_requests {
+        responses.push(JoinRequestResponse::from_join_request(&pool, jr).await?);
+    }
+    Ok(Json(responses))
+}
+
+pub async fn create_join_request_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(group_id): Path<Uuid>,
+    Json(payload): Json<CreateJoinRequestPayload>,
+) -> Result<(StatusCode, Json<JoinRequestResponse>), AppError> {
+    // Check if group exists
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Check if user exists
+    let user = User::find_by_id(&pool, payload.user_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let new_join_request = JoinRequest {
+        id: Uuid::new_v4(), // Generate new UUID for join request
+        group_id,
+        user_id: payload.user_id,
+        created_at: Utc::now(),
+    };
+
+    let join_request = JoinRequest::create(&pool, new_join_request).await?;
+    let response = JoinRequestResponse {
+        user: user.into(),
+        created_at: join_request.created_at,
+    };
+
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub async fn respond_to_join_request_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path((group_id, join_request_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<RespondToJoinRequestPayload>,
+) -> Result<Json<MessageResponse>, AppError> {
+    // Verify group exists
+    let _group = Group::find_by_id(&pool, group_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let join_request = JoinRequest::find_by_id(&pool, join_request_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Ensure the join request belongs to the specified group
+    if join_request.group_id != group_id {
+        return Err(AppError::NotFound); // Or a more specific error like Forbidden
+    }
+
+    match payload.action.as_str() {
+        "accept" => {
+            // Add user to group members (this would involve a new function in GroupMember model)
+            // For now, just delete the join request
+            JoinRequest::delete(&pool, join_request_id).await?;
+            Ok(Json(MessageResponse { message: "User added to group".to_string() }))
+        }
+        "decline" => {
+            JoinRequest::delete(&pool, join_request_id).await?;
+            Ok(Json(MessageResponse { message: "Join request declined".to_string() }))
+        }
+        _ => Err(AppError::ValidationError("Invalid action. Must be 'accept' or 'decline'".to_string())),
+    }
+}
+
+================
+File: src/handlers/material.rs
+================
+use axum::{
+    extract::{State, Json, Path},
+    http::StatusCode,
+};
+use sqlx::{Pool, Postgres};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+
+use crate::{
+    errors::AppError,
+    models::material::{Material, NewMaterial, MaterialLabel, Comment, NewComment},
+};
+
+// Material-related request/response DTOs
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateMaterialRequest {
+    pub title: String,
+    pub file: Option<String>,
+    pub url: Option<String>,
+    pub material_type: String,
+    pub course_id: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateMaterialRequest {
+    pub title: String,
+    pub file: Option<String>,
+    pub url: Option<String>,
+    pub material_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MaterialResponse {
+    pub id: Uuid,
+    pub title: String,
+    pub file: Option<String>,
+    pub url: Option<String>,
+    pub material_type: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub owner_id: Uuid,
+    pub course_id: Uuid,
+}
+
+impl From<Material> for MaterialResponse {
+    fn from(material: Material) -> Self {
+        MaterialResponse {
+            id: material.id,
+            title: material.title,
+            file: material.file,
+            url: material.url,
+            material_type: material.material_type,
+            created_at: material.created_at,
+            updated_at: material.updated_at,
+            owner_id: material.owner_id,
+            course_id: material.course_id,
+        }
+    }
+}
+
+// Comment-related request/response DTOs
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateCommentRequest {
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateCommentRequest {
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommentResponse {
+    pub id: Uuid,
+    pub material_id: Uuid,
+    pub user_id: Uuid,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<Comment> for CommentResponse {
+    fn from(comment: Comment) -> Self {
+        CommentResponse {
+            id: comment.id,
+            material_id: comment.material_id,
+            user_id: comment.user_id,
+            content: comment.content,
+            created_at: comment.created_at,
+        }
+    }
+}
+
+// MaterialLabel-related request/response DTOs
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateMaterialLabelRequest {
+    pub label_id: Uuid,
+    pub number: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MaterialLabelResponse {
+    pub material_id: Uuid,
+    pub label_id: Uuid,
+    pub number: i32,
+}
+
+impl From<MaterialLabel> for MaterialLabelResponse {
+    fn from(label: MaterialLabel) -> Self {
+        MaterialLabelResponse {
+            material_id: label.material_id,
+            label_id: label.label_id,
+            number: label.number,
+        }
+    }
+}
+
+// Material handlers
+pub async fn create_material_handler(
+    State(pool): State<Pool<Postgres>>,
+    Json(payload): Json<CreateMaterialRequest>,
+) -> Result<(StatusCode, Json<MaterialResponse>), AppError> {
+    let new_material = NewMaterial {
+        title: payload.title,
+        file: payload.file,
+        url: payload.url,
+        material_type: payload.material_type,
+        owner_id: Uuid::new_v4(), // Placeholder for now, will be replaced with actual user ID
+        course_id: payload.course_id,
+    };
+
+    let material = Material::create(&pool, new_material).await?;
+    Ok((StatusCode::CREATED, Json(material.into())))
+}
+
+pub async fn list_materials_by_course_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(course_id): Path<Uuid>,
+) -> Result<Json<Vec<MaterialResponse>>, AppError> {
+    let materials = Material::find_by_course_id(&pool, course_id).await?;
+    let responses: Vec<MaterialResponse> = materials.into_iter().map(Into::into).collect();
+    Ok(Json(responses))
+}
+
+pub async fn get_material_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<MaterialResponse>, AppError> {
+    let material = Material::find_by_id(&pool, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok(Json(material.into()))
+}
+
+pub async fn update_material_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateMaterialRequest>,
+) -> Result<Json<MaterialResponse>, AppError> {
+    let material = Material::update(
+        &pool,
+        id,
+        payload.title,
+        payload.file,
+        payload.url,
+        payload.material_type,
+    ).await?;
+    Ok(Json(material.into()))
+}
+
+pub async fn delete_material_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    Material::delete(&pool, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// Comment handlers
+pub async fn create_comment_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(material_id): Path<Uuid>,
+    Json(payload): Json<CreateCommentRequest>,
+) -> Result<(StatusCode, Json<CommentResponse>), AppError> {
+    let new_comment = NewComment {
+        material_id,
+        user_id: Uuid::new_v4(), // Placeholder for now, will be replaced with actual user ID
+        content: payload.content,
+    };
+
+    let comment = Comment::create(&pool, new_comment).await?;
+    Ok((StatusCode::CREATED, Json(comment.into())))
+}
+
+pub async fn list_comments_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(material_id): Path<Uuid>,
+) -> Result<Json<Vec<CommentResponse>>, AppError> {
+    let comments = Comment::find_by_material_id(&pool, material_id).await?;
+    let responses: Vec<CommentResponse> = comments.into_iter().map(Into::into).collect();
+    Ok(Json(responses))
+}
+
+pub async fn get_comment_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<CommentResponse>, AppError> {
+    let comment = Comment::find_by_id(&pool, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok(Json(comment.into()))
+}
+
+pub async fn update_comment_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateCommentRequest>,
+) -> Result<Json<CommentResponse>, AppError> {
+    let comment = Comment::update(&pool, id, payload.content).await?;
+    Ok(Json(comment.into()))
+}
+
+pub async fn delete_comment_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    Comment::delete(&pool, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// MaterialLabel handlers
+pub async fn create_material_label_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(material_id): Path<Uuid>,
+    Json(payload): Json<CreateMaterialLabelRequest>,
+) -> Result<(StatusCode, Json<MaterialLabelResponse>), AppError> {
+    let material_label = MaterialLabel::create(
+        &pool,
+        material_id,
+        payload.label_id,
+        payload.number,
+    ).await?;
+    Ok((StatusCode::CREATED, Json(material_label.into())))
+}
+
+pub async fn list_material_labels_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path(material_id): Path<Uuid>,
+) -> Result<Json<Vec<MaterialLabelResponse>>, AppError> {
+    let labels = MaterialLabel::find_by_material_id(&pool, material_id).await?;
+    let responses: Vec<MaterialLabelResponse> = labels.into_iter().map(Into::into).collect();
+    Ok(Json(responses))
+}
+
+pub async fn delete_material_label_handler(
+    State(pool): State<Pool<Postgres>>,
+    Path((material_id, label_id)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, AppError> {
+    MaterialLabel::delete(&pool, material_id, label_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+================
+File: src/handlers/mod.rs
+================
+pub mod group;
+pub mod join_request;
+pub mod group_member;
+pub mod course;
+pub mod material;
+
+================
+File: src/models/comment.rs
+================
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct Comment {
+    pub id: Uuid,
+    pub material_id: Uuid,
+    pub user_id: Uuid,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewComment {
+    pub material_id: Uuid,
+    pub user_id: Uuid,
+    pub content: String,
+}
+
+impl Comment {
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        new_comment: NewComment,
+    ) -> Result<Self, sqlx::Error> {
+        let comment = sqlx::query_as!(
+            Comment,
+            r#"
+            INSERT INTO comments (material_id, user_id, content)
+            VALUES ($1, $2, $3)
+            RETURNING id, material_id, user_id, content, created_at as "created_at!"
+            "#,
+            new_comment.material_id,
+            new_comment.user_id,
+            new_comment.content
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(comment)
+    }
+
+    pub async fn find_by_material_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        material_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let comments = sqlx::query_as!(
+            Comment,
+            r#"
+            SELECT id, material_id, user_id, content, created_at as "created_at!"
+            FROM comments
+            WHERE material_id = $1
+            ORDER BY created_at ASC
+            "#,
+            material_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(comments)
+    }
+
+    pub async fn find_by_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let comment = sqlx::query_as!(
+            Comment,
+            r#"
+            SELECT id, material_id, user_id, content, created_at as "created_at!"
+            FROM comments
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(comment)
+    }
+
+    pub async fn update(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+        content: String,
+    ) -> Result<Self, sqlx::Error> {
+        let updated_comment = sqlx::query_as!(
+            Comment,
+            r#"
+            UPDATE comments
+            SET content = $2
+            WHERE id = $1
+            RETURNING id, material_id, user_id, content, created_at as "created_at!"
+            "#,
+            id,
+            content
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(updated_comment)
+    }
+
+    pub async fn delete(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+            DELETE FROM comments
+            WHERE id = $1
+            "#,
+            id
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+================
+File: src/models/course.rs
+================
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct Course {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewCourse {
+    pub group_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+impl Course {
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        new_course: NewCourse,
+    ) -> Result<Self, sqlx::Error> {
+        let course = sqlx::query_as!(
+            Course,
+            r#"
+            INSERT INTO courses (group_id, name, description)
+            VALUES ($1, $2, $3)
+            RETURNING id, group_id, name, description, created_at as "created_at!"
+            "#,
+            new_course.group_id,
+            new_course.name,
+            new_course.description
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(course)
+    }
+
+    pub async fn find_by_group_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        group_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let courses = sqlx::query_as!(
+            Course,
+            r#"
+            SELECT id, group_id, name, description, created_at as "created_at!"
+            FROM courses
+            WHERE group_id = $1
+            ORDER BY created_at DESC
+            "#,
+            group_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(courses)
+    }
+
+    pub async fn find_by_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let course = sqlx::query_as!(
+            Course,
+            r#"
+            SELECT id, group_id, name, description, created_at as "created_at!"
+            FROM courses
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(course)
+    }
+
+    pub async fn update(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        course: Course,
+    ) -> Result<Self, sqlx::Error> {
+        let updated_course = sqlx::query_as!(
+            Course,
+            r#"
+            UPDATE courses
+            SET name = $2, description = $3
+            WHERE id = $1
+            RETURNING id, group_id, name, description, created_at as "created_at!"
+            "#,
+            course.id,
+            course.name,
+            course.description
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(updated_course)
+    }
+
+    pub async fn delete(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+            DELETE FROM courses
+            WHERE id = $1
+            "#,
+            id
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+================
+File: src/models/group.rs
+================
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct Group {
+    pub id: Uuid,
+    pub owner_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub join_type: String,
+    pub post_permission: String,
+    pub edit_permissions: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewGroup {
+    pub name: String,
+    pub description: Option<String>,
+    pub owner_id: Uuid,
+}
+
+impl Group {
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        new_group: NewGroup,
+    ) -> Result<Self, sqlx::Error> {
+        let group = sqlx::query_as!(
+            Group,
+            r#"
+            INSERT INTO groups (owner_id, name, description, join_type, post_permission, edit_permissions)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
+            "#,
+            new_group.owner_id,
+            new_group.name,
+            new_group.description,
+            "public", // Default join_type
+            "all_members", // Default post_permission
+            "owner_only", // Default edit_permissions
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(group)
+    }
+
+    pub async fn find_all(pool: &sqlx::Pool<sqlx::Postgres>) -> Result<Vec<Self>, sqlx::Error> {
+        let groups = sqlx::query_as!(
+            Group,
+            r#"
+            SELECT id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
+            FROM groups
+            ORDER BY created_at DESC
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(groups)
+    }
+
+    pub async fn find_by_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let group = sqlx::query_as!(
+            Group,
+            r#"
+            SELECT id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
+            FROM groups
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(group)
+    }
+}
+
+================
+File: src/models/group_member.rs
+================
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct GroupMember {
+    pub user_id: Uuid,
+    pub group_id: Uuid,
+    pub user_role: String,
+    pub joined_at: DateTime<Utc>,
+}
+
+impl GroupMember {
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        new_group_member: GroupMember,
+    ) -> Result<Self, sqlx::Error> {
+        let group_member = sqlx::query_as!(
+            GroupMember,
+            r#"
+            INSERT INTO group_members (user_id, group_id, user_role, joined_at)
+            VALUES ($1, $2, $3, $4)
+            RETURNING user_id, group_id, user_role, joined_at as "joined_at!"
+            "#,
+            new_group_member.user_id,
+            new_group_member.group_id,
+            new_group_member.user_role,
+            new_group_member.joined_at
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(group_member)
+    }
+
+    pub async fn find_by_group_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        group_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let group_members = sqlx::query_as!(
+            GroupMember,
+            r#"
+            SELECT user_id, group_id, user_role, joined_at as "joined_at!"
+            FROM group_members
+            WHERE group_id = $1
+            ORDER BY joined_at DESC
+            "#,
+            group_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(group_members)
+    }
+
+    pub async fn find_by_user_and_group_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        user_id: Uuid,
+        group_id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let group_member = sqlx::query_as!(
+            GroupMember,
+            r#"
+            SELECT user_id, group_id, user_role, joined_at as "joined_at!"
+            FROM group_members
+            WHERE user_id = $1 AND group_id = $2
+            "#,
+            user_id,
+            group_id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(group_member)
+    }
+
+    pub async fn update(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        group_member: GroupMember,
+    ) -> Result<Self, sqlx::Error> {
+        let updated_group_member = sqlx::query_as!(
+            GroupMember,
+            r#"
+            UPDATE group_members
+            SET user_role = $3
+            WHERE user_id = $1 AND group_id = $2
+            RETURNING user_id, group_id, user_role, joined_at as "joined_at!"
+            "#,
+            group_member.user_id,
+            group_member.group_id,
+            group_member.user_role
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(updated_group_member)
+    }
+
+    pub async fn delete(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        user_id: Uuid,
+        group_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+            DELETE FROM group_members
+            WHERE user_id = $1 AND group_id = $2
+            "#,
+            user_id,
+            group_id
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+================
+File: src/models/group.rs
+================
+// Re-export all models from their individual modules for backward compatibility
+// These modules are defined in models/mod.rs
+
+// Re-export types for convenience
+pub use crate::models::group::{Group, NewGroup};
+pub use crate::models::group_member::GroupMember;
+pub use crate::models::course::{Course, NewCourse};
+pub use crate::models::join_request::JoinRequest;
+
+================
+File: src/models/join_request.rs
+================
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct JoinRequest {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub user_id: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+impl JoinRequest {
+    pub async fn find_by_group_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        group_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let join_requests = sqlx::query_as!(
+            JoinRequest,
+            r#"
+            SELECT id, group_id, user_id, created_at as "created_at!"
+            FROM join_requests
+            WHERE group_id = $1
+            ORDER BY created_at DESC
+            "#,
+            group_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(join_requests)
+    }
+
+    pub async fn find_by_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let join_request = sqlx::query_as!(
+            JoinRequest,
+            r#"
+            SELECT id, group_id, user_id, created_at as "created_at!"
+            FROM join_requests
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(join_request)
+    }
+
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        new_join_request: JoinRequest,
+    ) -> Result<Self, sqlx::Error> {
+        let join_request = sqlx::query_as!(
+            JoinRequest,
+            r#"
+            INSERT INTO join_requests (id, group_id, user_id, created_at)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, group_id, user_id, created_at as "created_at!"
+            "#,
+            new_join_request.id,
+            new_join_request.group_id,
+            new_join_request.user_id,
+            new_join_request.created_at
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(join_request)
+    }
+
+    pub async fn delete(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+            DELETE FROM join_requests
+            WHERE id = $1
+            "#,
+            id
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+================
+File: src/models/material.rs
+================
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct Material {
+    pub id: Uuid,
+    pub title: String,
+    pub file: Option<String>,
+    pub url: Option<String>,
+    #[serde(rename = "type")]
+    #[sqlx(rename = "type")]
+    pub material_type: String, // Renamed to avoid Rust keyword conflict
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub owner_id: Uuid, // Fixed to match database column name
+    pub course_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewMaterial {
+    pub title: String,
+    pub file: Option<String>,
+    pub url: Option<String>,
+    pub material_type: String,
+    pub owner_id: Uuid,
+    pub course_id: Uuid,
+}
+
+impl Material {
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        new_material: NewMaterial,
+    ) -> Result<Self, sqlx::Error> {
+        let material = sqlx::query_as!(
+            Material,
+            r#"
+            INSERT INTO materials (title, file, url, type, owner_id, course_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", owner_id, course_id
+            "#,
+            new_material.title,
+            new_material.file,
+            new_material.url,
+            new_material.material_type,
+            new_material.owner_id,
+            new_material.course_id
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(material)
+    }
+
+    pub async fn find_by_course_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        course_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let materials = sqlx::query_as!(
+            Material,
+            r#"
+            SELECT id, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", owner_id, course_id
+            FROM materials
+            WHERE course_id = $1
+            ORDER BY created_at DESC
+            "#,
+            course_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(materials)
+    }
+
+    pub async fn find_by_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let material = sqlx::query_as!(
+            Material,
+            r#"
+            SELECT id, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", owner_id, course_id
+            FROM materials
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(material)
+    }
+
+    pub async fn update(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+        title: String,
+        file: Option<String>,
+        url: Option<String>,
+        material_type: String,
+    ) -> Result<Self, sqlx::Error> {
+        let updated_material = sqlx::query_as!(
+            Material,
+            r#"
+            UPDATE materials
+            SET title = $2, file = $3, url = $4, type = $5, updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", owner_id, course_id
+            "#,
+            id,
+            title,
+            file,
+            url,
+            material_type
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(updated_material)
+    }
+
+    pub async fn delete(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+            DELETE FROM materials
+            WHERE id = $1
+            "#,
+            id
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+================
+File: src/models/material_label.rs
+================
+use uuid::Uuid;
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct MaterialLabel {
+    pub material_id: Uuid,
+    pub label_id: Uuid,
+    pub number: i32,
+}
+
+impl MaterialLabel {
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        material_id: Uuid,
+        label_id: Uuid,
+        number: i32,
+    ) -> Result<Self, sqlx::Error> {
+        let material_label = sqlx::query_as!(
+            MaterialLabel,
+            r#"
+            INSERT INTO material_labels (material_id, label_id, number)
+            VALUES ($1, $2, $3)
+            RETURNING material_id, label_id, number
+            "#,
+            material_id,
+            label_id,
+            number
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(material_label)
+    }
+
+    pub async fn find_by_material_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        material_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let material_labels = sqlx::query_as!(
+            MaterialLabel,
+            r#"
+            SELECT material_id, label_id, number
+            FROM material_labels
+            WHERE material_id = $1
+            ORDER BY number ASC
+            "#,
+            material_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(material_labels)
+    }
+
+    pub async fn delete(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        material_id: Uuid,
+        label_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+            DELETE FROM material_labels
+            WHERE material_id = $1 AND label_id = $2
+            "#,
+            material_id,
+            label_id
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+================
+File: src/models/material.rs
+================
+// Re-export material-related models from their dedicated modules
+// This maintains backward compatibility while allowing modular organization
+
+pub use crate::models::material::{Material, NewMaterial};
+pub use crate::models::material_label::MaterialLabel;
+pub use crate::models::comment::{Comment, NewComment};
+
+================
+File: src/models/mod.rs
+================
+pub mod group;
+pub mod group;
+pub mod group_member;
+pub mod course;
+pub mod join_request;
+pub mod material;
+pub mod material;
+pub mod material_label;
+pub mod comment;
+pub mod user;
+
+================
+File: src/models/user.rs
+================
+use uuid::Uuid;
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct User {
+    pub id: Uuid,
+    pub email: String,
+    pub username: String,
+}
+
+impl User {
+    pub async fn find_by_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+            SELECT id, email, username
+            FROM users
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(user)
+    }
+}
+
+================
+File: src/routes/course.rs
+================
+// src/routes/course.rs
+use axum::{
+    routing::{get, post, put, delete},
+    Router,
+};
+use sqlx::PgPool;
+
+use crate::handlers::course::{
+    list_courses_handler,
+    create_course_handler,
+    get_course_detail_handler,
+    update_course_handler,
+    delete_course_handler,
+};
+
+pub fn course_routes() -> Router<PgPool> {
+    Router::new()
+        .route("/groups/{group_id}/courses", get(list_courses_handler).post(create_course_handler))
+        .route("/courses/{course_id}", get(get_course_detail_handler).put(update_course_handler).delete(delete_course_handler))
+}
+
+================
+File: src/routes/group_member.rs
+================
+// src/routes/group_member.rs
+use axum::{
+    routing::{get, post, put, delete},
+    Router,
+};
+use sqlx::PgPool;
+
+use crate::handlers::group_member::{
+    list_group_members_handler,
+    create_group_member_handler,
+    get_group_member_detail_handler,
+    update_group_member_handler,
+    delete_group_member_handler,
+    get_self_group_membership_handler,
+    leave_group_membership_handler,
+};
+
+pub fn group_member_routes() -> Router<PgPool> {
+    Router::new()
+        .route("/groups/{group_id}/members", get(list_group_members_handler))
+        .route("/groups/{group_id}/members/create", post(create_group_member_handler))
+        .route("/groups/{group_id}/members/self", get(get_self_group_membership_handler).delete(leave_group_membership_handler))
+        .route("/groups/{group_id}/members/{user_id}", get(get_group_member_detail_handler).put(update_group_member_handler).delete(delete_group_member_handler))
+}
+
+================
+File: src/routes/group.rs
+================
+// src/routes/group.rs
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use sqlx::PgPool;
+
+use crate::handlers::group::{create_group_handler, list_groups_handler};
+
+pub fn group_routes() -> Router<PgPool> {
+    Router::new()
+        .route("/groups", post(create_group_handler).get(list_groups_handler))
+}
+
+================
+File: src/routes/join_request.rs
+================
+// src/routes/join_request.rs
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use sqlx::PgPool;
+
+use crate::handlers::join_request::{
+    list_join_requests_handler,
+    create_join_request_handler,
+    respond_to_join_request_handler,
+};
+
+pub fn join_request_routes() -> Router<PgPool> {
+    Router::new()
+        .route("/groups/{group_id}/join-requests", get(list_join_requests_handler).post(create_join_request_handler))
+        .route("/groups/{group_id}/join-requests/{join_request_id}", post(respond_to_join_request_handler))
+}
+
+================
+File: src/routes/material.rs
+================
+use axum::{
+    routing::{get, post, put, delete},
+    Router,
+};
+use sqlx::PgPool;
+
+use crate::handlers::material::{
+    // Material handlers
+    create_material_handler,
+    list_materials_by_course_handler,
+    get_material_handler,
+    update_material_handler,
+    delete_material_handler,
+    // Comment handlers
+    create_comment_handler,
+    list_comments_handler,
+    get_comment_handler,
+    update_comment_handler,
+    delete_comment_handler,
+    // MaterialLabel handlers
+    create_material_label_handler,
+    list_material_labels_handler,
+    delete_material_label_handler,
+};
+
+pub fn material_routes() -> Router<PgPool> {
+    Router::new()
+        // Material routes
+        .route("/materials", post(create_material_handler))
+        .route("/courses/{course_id}/materials", get(list_materials_by_course_handler))
+        .route("/materials/{id}", get(get_material_handler))
+        .route("/materials/{id}", put(update_material_handler))
+        .route("/materials/{id}", delete(delete_material_handler))
+        
+        // Comment routes
+        .route("/materials/{material_id}/comments", post(create_comment_handler))
+        .route("/materials/{material_id}/comments", get(list_comments_handler))
+        .route("/comments/{id}", get(get_comment_handler))
+        .route("/comments/{id}", put(update_comment_handler))
+        .route("/comments/{id}", delete(delete_comment_handler))
+        
+        // MaterialLabel routes
+        .route("/materials/{material_id}/labels", post(create_material_label_handler))
+        .route("/materials/{material_id}/labels", get(list_material_labels_handler))
+        .route("/materials/{material_id}/labels/{label_id}", delete(delete_material_label_handler))
+}
+
+================
+File: src/routes/mod.rs
+================
+pub mod group;
+pub mod join_request;
+pub mod group_member;
+pub mod course;
+pub mod material;
+
+================
+File: src/main.rs
+================
+use axum::{
+    routing::get,
+    Router,
+};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+mod db;
+mod models;
+mod handlers;
+mod routes;
+mod middleware;
+mod auth;
+mod permissions;
+mod errors;
+mod utils;
+
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "rusty_studyshpere=debug,tower_http=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    let pool = db::init_db_pool()
+        .await
+        .expect("Failed to initialize database pool");
+
+    let app = Router::new()
+        .nest("/api", routes::group::group_routes())
+        .nest("/api", routes::join_request::join_request_routes())
+        .nest("/api", routes::group_member::group_member_routes())
+        .nest("/api", routes::material::material_routes())
+        .route("/", get(|| async { "Hello, World!" }))
+        .with_state(pool);
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+        .await
+        .unwrap();
+    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    axum::serve(listener, app).await.unwrap();
+}
+
+================
+File: .env.example
+================
+# Example environment variables
+DATABASE_URL=postgres://user:password@localhost:5432/database_name
+JWT_SECRET=your_jwt_secret_key
+
+================
+File: .gitignore
+================
+/target
+
+================
+File: Cargo.toml
+================
+[package]
+name = "rusty_studyshpere"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.45.1", features = ["full"] }
+axum = "0.8.4"
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.117"
+sqlx = { version = "0.7.4", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
+jsonwebtoken = "9.3.0"
+cookie = "0.18.1"
+argon2 = "0.5.3"
+uuid = { version = "1.8.0", features = ["serde", "v4"] }
+chrono = { version = "0.4.38", features = ["serde"] }
+dotenvy = "0.15.7"
+anyhow = "1.0.86"
+thiserror = "1.0.61"
+tower-http = { version = "0.5.2", features = ["cors", "trace"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+validator = { version = "0.18.1", features = ["derive"] }
+
+
+
+
+================================================================
+End of Codebase
+================================================================

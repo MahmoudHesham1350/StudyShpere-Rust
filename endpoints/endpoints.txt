@@ -1,0 +1,51 @@
+I have analyzed the provided codebase from 'repomix-output.txt' and identified all the API endpoints. I have also provided suggestions for potential improvements and identified a missing function definition.
+
+**Summary of Endpoints:**
+
+**Backend Root URLs:**
+*   `/admin/`
+*   `/api/user/` (includes users app URLs)
+*   `/api/` (includes groups_courses and materials app URLs)
+
+**Groups & Courses Endpoints:**
+*   `POST /api/groups/` (Create Group)
+*   `GET /api/user/groups/` (List Owned Groups)
+*   `GET /api/groups/list/` (List All Groups)
+*   `GET, PUT, DELETE /api/groups/<uuid:group_id>/` (Group Detail)
+*   `GET /api/groups/<uuid:group_id>/members/` (List Group Members)
+*   `POST /api/groups/<uuid:group_id>/members/create/` (Create Group Member)
+*   `GET, DELETE /api/groups/<uuid:group_id>/members/self/` (Get/Leave Group Membership)
+*   `GET, PUT, DELETE /api/groups/<uuid:group_id>/members/<uuid:user_id>/` (Group Member Detail)
+*   `GET /api/groups/<uuid:group_id>/join-requests/` (List Join Requests)
+*   `POST /api/join-requests/<uuid:join_request_id>/` (Respond to Join Request)
+*   `GET, POST /api/groups/<uuid:group_id>/courses/` (List/Create Courses for a Group)
+*   `GET, PUT, DELETE /api/courses/<uuid:course_id>/` (Course Detail)
+
+**Materials Endpoints:**
+*   `POST /api/course/<uuid:course_id>/materials/create/` (Create Material)
+*   `GET /api/course/<uuid:course_id>/materials/` (List Materials for a Course)
+*   `GET, PUT, DELETE /api/materials/<uuid:material_id>/` (Material Detail)
+*   `GET, POST /api/groups/<uuid:group_id>/labels/` (List/Create Labels for a Group)
+*   `GET, PUT /api/materials/<uuid:material_id>/labels/` (Add/Retrieve Labels for a Material)
+*   `GET /api/course/<course_id>/materials/labels/<label_id>/` (List Materials by Label)
+*   `POST /api/comments/create/` (Create Material Comment)
+*   `GET /api/materials/<uuid:material_id>/comments/` (List Comments for a Material)
+*   `GET, PUT, DELETE /api/comments/<uuid:comment_id>/` (Material Comment Detail)
+
+**Users Endpoints:**
+*   `POST /api/user/register/` (User Registration)
+*   `POST /api/user/login/` (User Login)
+*   `POST /api/user/logout/` (User Logout)
+*   `POST /api/user/token/refresh/` (Refresh Access Token)
+*   `POST /api/user/token/verify/` (Verify Token)
+*   `GET, PUT /api/user/profile/` (User Profile Retrieve/Update)
+
+**Suggestions for Improvement:**
+
+1.  **Groups & Courses - Redundant List Endpoints:** Consolidate `CreateGroupAPIView` and `GroupListAPIView` into a single `ListCreateAPIView` at `/api/groups/` to handle both `GET` (list) and `POST` (create). Remove `/api/groups/list/`.
+2.  **Groups & Courses - Inconsistent `join-requests` URL:** For consistency, nest `JoinRequestResponseAPIView` under the group, e.g., `/api/groups/<uuid:group_id>/join-requests/<uuid:join_request_id>/`.
+3.  **Groups & Courses - `GroupMemberSelfDetailAPIView` Naming:** Align the URL path `/groups/<uuid:group_id>/members/self/` with the view's purpose and documentation.
+4.  **Materials - Inconsistent Material Creation/Listing:** Consolidate `CreateMaterialAPIView` and `MaterialListAPIView` into a single `ListCreateAPIView` at `/api/course/<uuid:course_id>/materials/` to handle both `GET` (list) and `POST` (create). Remove `/api/course/<uuid:course_id>/materials/create/`.
+5.  **Materials - Inconsistent Comment Endpoints:** Nest all comment-related endpoints under the material, e.g., `POST /api/materials/<uuid:material_id>/comments/` for creation and `PUT, DELETE /api/materials/<uuid:material_id>/comments/<uuid:comment_id>/` for detail operations.
+6.  **Materials - `MaterialLabelsAPIView` Method Discrepancy:** The documentation states `GET, POST` for `/api/materials/<uuid:material_id>/labels/`, but the view implements a `put` method. Align the documentation with the code or implement a `post` method if intended.
+7.  **Materials - Missing `can_delete_material` function:** The `perform_destroy` method in `MaterialDestroyUpdateAPIView` calls `can_delete_material`, which is not defined in the provided code. This needs to be implemented to prevent a runtime error.
