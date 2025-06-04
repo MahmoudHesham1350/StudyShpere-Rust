@@ -1,18 +1,6 @@
-use axum::{
-    routing::get,
-    Router,
-};
+use axum::Router;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-mod db;
-mod models;
-mod handlers;
-mod routes;
-mod middleware;
-mod auth;
-mod permissions;
-mod errors;
-mod utils;
+use rusty_studyshpere::{db, create_app};
 
 #[tokio::main]
 async fn main() {
@@ -28,13 +16,7 @@ async fn main() {
         .await
         .expect("Failed to initialize database pool");
 
-    let app = Router::new()
-        .nest("/api", routes::group::group_routes())
-        .nest("/api", routes::join_request::join_request_routes())
-        .nest("/api", routes::group_member::group_member_routes())
-        .nest("/api", routes::material::material_routes())
-        .route("/", get(|| async { "Hello, World!" }))
-        .with_state(pool);
+    let app = create_app(pool);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await

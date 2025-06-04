@@ -70,11 +70,9 @@ src/
   models/
     comment.rs
     course.rs
-    group.rs
     group_member.rs
     group.rs
     join_request.rs
-    material.rs
     material_label.rs
     material.rs
     mod.rs
@@ -86,6 +84,7 @@ src/
     join_request.rs
     material.rs
     mod.rs
+  lib.rs
   main.rs
 .env.example
 .gitignore
@@ -94,6 +93,35 @@ Cargo.toml
 ================================================================
 Files
 ================================================================
+
+================
+File: src/lib.rs
+================
+// src/lib.rs
+pub mod db;
+pub mod models;
+pub mod handlers;
+pub mod routes;
+pub mod middleware;
+pub mod auth;
+pub mod permissions;
+pub mod errors;
+pub mod utils;
+
+use axum::{routing::get, Router};
+use sqlx::PgPool;
+
+pub fn create_app(pool: PgPool) -> Router {
+    Router::new()
+        .nest("/api", routes::group::group_routes())
+        .nest("/api", routes::join_request::join_request_routes())
+        .nest("/api", routes::group_member::group_member_routes())
+        .nest("/api", routes::course::course_routes())
+        .nest("/api", routes::material::material_routes())
+        .route("/health", get(|| async { "OK" }))
+        .route("/", get(|| async { "Hello, World!" }))
+        .with_state(pool)
+}
 
 ================
 File: migrations/20250604094927_create_users_table.sql
@@ -284,7 +312,8 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     errors::AppError,
-    models::group::{Group, Course, NewCourse},
+    models::group::Group,
+    models::course::{Course, NewCourse},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -409,7 +438,8 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     errors::AppError,
-    models::group::{Group, GroupMember},
+    models::group::Group,
+    models::group_member::GroupMember,
     models::user::User,
 };
 
@@ -675,7 +705,8 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     errors::AppError,
-    models::group::{JoinRequest, Group}, // Assuming Group model is needed for validation
+    models::join_request::JoinRequest,
+    models::group::Group,
     models::user::User, // Assuming User model is needed for response
 };
 
@@ -824,7 +855,9 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     errors::AppError,
-    models::material::{Material, NewMaterial, MaterialLabel, Comment, NewComment},
+    models::material::{Material, NewMaterial},
+    models::material_label::MaterialLabel,
+    models::comment::{Comment, NewComment},
 };
 
 // Material-related request/response DTOs
@@ -1335,93 +1368,6 @@ impl Course {
 }
 
 ================
-File: src/models/group.rs
-================
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
-pub struct Group {
-    pub id: Uuid,
-    pub owner_id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub join_type: String,
-    pub post_permission: String,
-    pub edit_permissions: String,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NewGroup {
-    pub name: String,
-    pub description: Option<String>,
-    pub owner_id: Uuid,
-}
-
-impl Group {
-    pub async fn create(
-        pool: &sqlx::Pool<sqlx::Postgres>,
-        new_group: NewGroup,
-    ) -> Result<Self, sqlx::Error> {
-        let group = sqlx::query_as!(
-            Group,
-            r#"
-            INSERT INTO groups (owner_id, name, description, join_type, post_permission, edit_permissions)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
-            "#,
-            new_group.owner_id,
-            new_group.name,
-            new_group.description,
-            "public", // Default join_type
-            "all_members", // Default post_permission
-            "owner_only", // Default edit_permissions
-        )
-        .fetch_one(pool)
-        .await?;
-
-        Ok(group)
-    }
-
-    pub async fn find_all(pool: &sqlx::Pool<sqlx::Postgres>) -> Result<Vec<Self>, sqlx::Error> {
-        let groups = sqlx::query_as!(
-            Group,
-            r#"
-            SELECT id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
-            FROM groups
-            ORDER BY created_at DESC
-            "#
-        )
-        .fetch_all(pool)
-        .await?;
-
-        Ok(groups)
-    }
-
-    pub async fn find_by_id(
-        pool: &sqlx::Pool<sqlx::Postgres>,
-        id: Uuid,
-    ) -> Result<Option<Self>, sqlx::Error> {
-        let group = sqlx::query_as!(
-            Group,
-            r#"
-            SELECT id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
-            FROM groups
-            WHERE id = $1
-            "#,
-            id
-        )
-        .fetch_optional(pool)
-        .await?;
-
-        Ok(group)
-    }
-}
-
-================
 File: src/models/group_member.rs
 ================
 use uuid::Uuid;
@@ -1546,14 +1492,89 @@ impl GroupMember {
 ================
 File: src/models/group.rs
 ================
-// Re-export all models from their individual modules for backward compatibility
-// These modules are defined in models/mod.rs
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
-// Re-export types for convenience
-pub use crate::models::group::{Group, NewGroup};
-pub use crate::models::group_member::GroupMember;
-pub use crate::models::course::{Course, NewCourse};
-pub use crate::models::join_request::JoinRequest;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct Group {
+    pub id: Uuid,
+    pub owner_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub join_type: String,
+    pub post_permission: String,
+    pub edit_permissions: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewGroup {
+    pub name: String,
+    pub description: Option<String>,
+    pub owner_id: Uuid,
+}
+
+impl Group {
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        new_group: NewGroup,
+    ) -> Result<Self, sqlx::Error> {
+        let group = sqlx::query_as!(
+            Group,
+            r#"
+            INSERT INTO groups (owner_id, name, description, join_type, post_permission, edit_permissions)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
+            "#,
+            new_group.owner_id,
+            new_group.name,
+            new_group.description,
+            "public", // Default join_type
+            "all_members", // Default post_permission
+            "owner_only", // Default edit_permissions
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(group)
+    }
+
+    pub async fn find_all(pool: &sqlx::Pool<sqlx::Postgres>) -> Result<Vec<Self>, sqlx::Error> {
+        let groups = sqlx::query_as!(
+            Group,
+            r#"
+            SELECT id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
+            FROM groups
+            ORDER BY created_at DESC
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(groups)
+    }
+
+    pub async fn find_by_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let group = sqlx::query_as!(
+            Group,
+            r#"
+            SELECT id, owner_id, name, description, join_type, post_permission, edit_permissions, created_at as "created_at!"
+            FROM groups
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(group)
+    }
+}
 
 ================
 File: src/models/join_request.rs
@@ -1643,6 +1664,84 @@ impl JoinRequest {
             WHERE id = $1
             "#,
             id
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+================
+File: src/models/material_label.rs
+================
+use uuid::Uuid;
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct MaterialLabel {
+    pub material_id: Uuid,
+    pub label_id: Uuid,
+    pub number: i32,
+}
+
+impl MaterialLabel {
+    pub async fn create(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        material_id: Uuid,
+        label_id: Uuid,
+        number: i32,
+    ) -> Result<Self, sqlx::Error> {
+        let material_label = sqlx::query_as!(
+            MaterialLabel,
+            r#"
+            INSERT INTO material_labels (material_id, label_id, number)
+            VALUES ($1, $2, $3)
+            RETURNING material_id, label_id, number
+            "#,
+            material_id,
+            label_id,
+            number
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(material_label)
+    }
+
+    pub async fn find_by_material_id(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        material_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let material_labels = sqlx::query_as!(
+            MaterialLabel,
+            r#"
+            SELECT material_id, label_id, number
+            FROM material_labels
+            WHERE material_id = $1
+            ORDER BY number ASC
+            "#,
+            material_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(material_labels)
+    }
+
+    pub async fn delete(
+        pool: &sqlx::Pool<sqlx::Postgres>,
+        material_id: Uuid,
+        label_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+            DELETE FROM material_labels
+            WHERE material_id = $1 AND label_id = $2
+            "#,
+            material_id,
+            label_id
         )
         .execute(pool)
         .await?;
@@ -1795,102 +1894,12 @@ impl Material {
 }
 
 ================
-File: src/models/material_label.rs
-================
-use uuid::Uuid;
-use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
-pub struct MaterialLabel {
-    pub material_id: Uuid,
-    pub label_id: Uuid,
-    pub number: i32,
-}
-
-impl MaterialLabel {
-    pub async fn create(
-        pool: &sqlx::Pool<sqlx::Postgres>,
-        material_id: Uuid,
-        label_id: Uuid,
-        number: i32,
-    ) -> Result<Self, sqlx::Error> {
-        let material_label = sqlx::query_as!(
-            MaterialLabel,
-            r#"
-            INSERT INTO material_labels (material_id, label_id, number)
-            VALUES ($1, $2, $3)
-            RETURNING material_id, label_id, number
-            "#,
-            material_id,
-            label_id,
-            number
-        )
-        .fetch_one(pool)
-        .await?;
-
-        Ok(material_label)
-    }
-
-    pub async fn find_by_material_id(
-        pool: &sqlx::Pool<sqlx::Postgres>,
-        material_id: Uuid,
-    ) -> Result<Vec<Self>, sqlx::Error> {
-        let material_labels = sqlx::query_as!(
-            MaterialLabel,
-            r#"
-            SELECT material_id, label_id, number
-            FROM material_labels
-            WHERE material_id = $1
-            ORDER BY number ASC
-            "#,
-            material_id
-        )
-        .fetch_all(pool)
-        .await?;
-
-        Ok(material_labels)
-    }
-
-    pub async fn delete(
-        pool: &sqlx::Pool<sqlx::Postgres>,
-        material_id: Uuid,
-        label_id: Uuid,
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query!(
-            r#"
-            DELETE FROM material_labels
-            WHERE material_id = $1 AND label_id = $2
-            "#,
-            material_id,
-            label_id
-        )
-        .execute(pool)
-        .await?;
-
-        Ok(())
-    }
-}
-
-================
-File: src/models/material.rs
-================
-// Re-export material-related models from their dedicated modules
-// This maintains backward compatibility while allowing modular organization
-
-pub use crate::models::material::{Material, NewMaterial};
-pub use crate::models::material_label::MaterialLabel;
-pub use crate::models::comment::{Comment, NewComment};
-
-================
 File: src/models/mod.rs
 ================
-pub mod group;
 pub mod group;
 pub mod group_member;
 pub mod course;
 pub mod join_request;
-pub mod material;
 pub mod material;
 pub mod material_label;
 pub mod comment;
@@ -2084,21 +2093,9 @@ pub mod material;
 ================
 File: src/main.rs
 ================
-use axum::{
-    routing::get,
-    Router,
-};
+use axum::Router;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-mod db;
-mod models;
-mod handlers;
-mod routes;
-mod middleware;
-mod auth;
-mod permissions;
-mod errors;
-mod utils;
+use rusty_studyshpere::{db, create_app};
 
 #[tokio::main]
 async fn main() {
@@ -2114,18 +2111,12 @@ async fn main() {
         .await
         .expect("Failed to initialize database pool");
 
-    let app = Router::new()
-        .nest("/api", routes::group::group_routes())
-        .nest("/api", routes::join_request::join_request_routes())
-        .nest("/api", routes::group_member::group_member_routes())
-        .nest("/api", routes::material::material_routes())
-        .route("/", get(|| async { "Hello, World!" }))
-        .with_state(pool);
+    let app = create_app(pool);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .unwrap();
-    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    tracing::debug!("listening on http://{}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -2167,6 +2158,15 @@ tower-http = { version = "0.5.2", features = ["cors", "trace"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 validator = { version = "0.18.1", features = ["derive"] }
+
+[dev-dependencies]
+tokio-test = "0.4.3"
+tower = { version = "0.4.13", features = ["util"] }
+axum-test = "15.0.1"
+hyper = { version = "1.0.1", features = ["client", "http1"] }
+http-body-util = "0.1.0"
+serde_json = "1.0.117"
+sqlx = { version = "0.7.4", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
 
 
 
