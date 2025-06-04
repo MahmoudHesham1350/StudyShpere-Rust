@@ -1,0 +1,1373 @@
+openapi: 3.0.3
+info:
+  title: StudySphere API
+  description: |
+    StudySphere is a collaborative learning platform API that enables users to create and manage study groups, 
+    courses, learning materials, and facilitate discussion through comments. The platform supports group 
+    management, course organization, material sharing, and community-driven learning experiences.
+    
+    ## Features
+    - User authentication and authorization
+    - Study group creation and management
+    - Group membership management
+    - Join request handling
+    - Course creation and organization
+    - Learning material management
+    - Comment system for materials
+    - Material labeling and categorization
+    
+  version: 0.1.0
+  contact:
+    name: StudySphere API Support
+    email: support@studysphere.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://api.studysphere.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Groups
+    description: Study group management
+  - name: Group Members
+    description: Group membership management
+  - name: Join Requests
+    description: Group join request handling
+  - name: Courses
+    description: Course management
+  - name: Materials
+    description: Learning material management
+  - name: Comments
+    description: Material comments and discussions
+  - name: Labels
+    description: Material labeling and categorization
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns the health status of the API
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "OK"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /:
+    get:
+      tags:
+        - Health
+      summary: Home endpoint
+      description: Returns welcome message and API information
+      operationId: home
+      responses:
+        '200':
+          description: Welcome message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Welcome to StudySphere API"
+                  version:
+                    type: string
+                    example: "0.1.0"
+
+  /api/groups:
+    get:
+      tags:
+        - Groups
+      summary: List all groups
+      description: Retrieve a list of all study groups
+      operationId: listGroups
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of groups to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of groups to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of groups retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Groups
+      summary: Create a new group
+      description: Create a new study group
+      operationId: createGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: Group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/groups/{group_id}/members:
+    get:
+      tags:
+        - Group Members
+      summary: List group members
+      description: Retrieve all members of a specific group
+      operationId: listGroupMembers
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      responses:
+        '200':
+          description: Group members retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupMember'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Group Members
+      summary: Add member to group
+      description: Add a new member to the group
+      operationId: addGroupMember
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddGroupMemberRequest'
+      responses:
+        '201':
+          description: Member added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Member already exists in group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/groups/{group_id}/members/{user_id}:
+    get:
+      tags:
+        - Group Members
+      summary: Get group member details
+      description: Retrieve details of a specific group member
+      operationId: getGroupMember
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Group member details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMember'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Group Members
+      summary: Update group member
+      description: Update a group member's role or status
+      operationId: updateGroupMember
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGroupMemberRequest'
+      responses:
+        '200':
+          description: Group member updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Group Members
+      summary: Remove group member
+      description: Remove a member from the group
+      operationId: removeGroupMember
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Member removed successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/groups/{group_id}/join-requests:
+    get:
+      tags:
+        - Join Requests
+      summary: List join requests
+      description: Retrieve all join requests for a group
+      operationId: listJoinRequests
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+        - name: status
+          in: query
+          description: Filter by join request status
+          required: false
+          schema:
+            $ref: '#/components/schemas/JoinRequestStatus'
+      responses:
+        '200':
+          description: Join requests retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JoinRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Join Requests
+      summary: Create join request
+      description: Submit a request to join a group
+      operationId: createJoinRequest
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJoinRequestRequest'
+      responses:
+        '201':
+          description: Join request created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Join request already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/groups/{group_id}/join-requests/{request_id}:
+    put:
+      tags:
+        - Join Requests
+      summary: Respond to join request
+      description: Accept or reject a join request
+      operationId: respondToJoinRequest
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+        - name: request_id
+          in: path
+          required: true
+          description: ID of the join request
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondToJoinRequestRequest'
+      responses:
+        '200':
+          description: Join request response processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/groups/{group_id}/courses:
+    get:
+      tags:
+        - Courses
+      summary: List group courses
+      description: Retrieve all courses within a group
+      operationId: listGroupCourses
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      responses:
+        '200':
+          description: Courses retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Course'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Courses
+      summary: Create course
+      description: Create a new course within a group
+      operationId: createCourse
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+      responses:
+        '201':
+          description: Course created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/courses/{course_id}:
+    get:
+      tags:
+        - Courses
+      summary: Get course details
+      description: Retrieve details of a specific course
+      operationId: getCourse
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      responses:
+        '200':
+          description: Course details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Courses
+      summary: Update course
+      description: Update course information
+      operationId: updateCourse
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+      responses:
+        '200':
+          description: Course updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Courses
+      summary: Delete course
+      description: Delete a course and all its associated materials
+      operationId: deleteCourse
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      responses:
+        '204':
+          description: Course deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/materials:
+    post:
+      tags:
+        - Materials
+      summary: Create material
+      description: Create a new learning material
+      operationId: createMaterial
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMaterialRequest'
+      responses:
+        '201':
+          description: Material created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Material'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/courses/{course_id}/materials:
+    get:
+      tags:
+        - Materials
+      summary: List course materials
+      description: Retrieve all materials for a specific course
+      operationId: listCourseMaterials
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+        - name: type
+          in: query
+          description: Filter materials by type
+          required: false
+          schema:
+            $ref: '#/components/schemas/MaterialType'
+      responses:
+        '200':
+          description: Materials retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Material'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/materials/{material_id}:
+    get:
+      tags:
+        - Materials
+      summary: Get material details
+      description: Retrieve details of a specific material
+      operationId: getMaterial
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+      responses:
+        '200':
+          description: Material details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Material'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Materials
+      summary: Update material
+      description: Update material information
+      operationId: updateMaterial
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMaterialRequest'
+      responses:
+        '200':
+          description: Material updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Material'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Materials
+      summary: Delete material
+      description: Delete a material and all its associated comments
+      operationId: deleteMaterial
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+      responses:
+        '204':
+          description: Material deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/materials/{material_id}/comments:
+    get:
+      tags:
+        - Comments
+      summary: List material comments
+      description: Retrieve all comments for a specific material
+      operationId: listMaterialComments
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+        - name: limit
+          in: query
+          description: Maximum number of comments to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of comments to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Comments retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Comment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Comments
+      summary: Create comment
+      description: Add a new comment to a material
+      operationId: createComment
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentRequest'
+      responses:
+        '201':
+          description: Comment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/comments/{comment_id}:
+    get:
+      tags:
+        - Comments
+      summary: Get comment details
+      description: Retrieve details of a specific comment
+      operationId: getComment
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      responses:
+        '200':
+          description: Comment details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Comments
+      summary: Update comment
+      description: Update comment content
+      operationId: updateComment
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCommentRequest'
+      responses:
+        '200':
+          description: Comment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Comments
+      summary: Delete comment
+      description: Delete a comment
+      operationId: deleteComment
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      responses:
+        '204':
+          description: Comment deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/materials/{material_id}/labels:
+    get:
+      tags:
+        - Labels
+      summary: List material labels
+      description: Retrieve all labels associated with a material
+      operationId: listMaterialLabels
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+      responses:
+        '200':
+          description: Labels retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaterialLabel'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Labels
+      summary: Add material label
+      description: Add a label to a material
+      operationId: addMaterialLabel
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMaterialLabelRequest'
+      responses:
+        '201':
+          description: Label added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaterialLabel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Label already exists for this material
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Labels
+      summary: Remove material label
+      description: Remove a label from a material
+      operationId: removeMaterialLabel
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+        - name: label_name
+          in: query
+          required: true
+          description: Name of the label to remove
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Label removed successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    GroupId:
+      name: group_id
+      in: path
+      required: true
+      description: ID of the group
+      schema:
+        type: string
+        format: uuid
+
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      description: ID of the user
+      schema:
+        type: string
+        format: uuid
+
+    CourseId:
+      name: course_id
+      in: path
+      required: true
+      description: ID of the course
+      schema:
+        type: string
+        format: uuid
+
+    MaterialId:
+      name: material_id
+      in: path
+      required: true
+      description: ID of the material
+      schema:
+        type: string
+        format: uuid
+
+    CommentId:
+      name: comment_id
+      in: path
+      required: true
+      description: ID of the comment
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Group:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - creator_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the group
+        name:
+          type: string
+          description: Name of the group
+          maxLength: 255
+        description:
+          type: string
+          description: Description of the group
+        creator_id:
+          type: string
+          format: uuid
+          description: ID of the user who created the group
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the group was created
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when the group was last updated
+
+    CreateGroupRequest:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          description: Name of the group
+          maxLength: 255
+          minLength: 1
+        description:
+          type: string
+          description: Description of the group
+          minLength: 1
+
+    GroupMember:
+      type: object
+      required:
+        - group_id
+        - user_id
+        - role
+        - joined_at
+      properties:
+        group_id:
+          type: string
+          format: uuid
+          description: ID of the group
+        user_id:
+          type: string
+          format: uuid
+          description: ID of the user
+        role:
+          $ref: '#/components/schemas/GroupRole'
+        joined_at:
+          type: string
+          format: date-time
+          description: Timestamp when the user joined the group
+
+    GroupRole:
+      type: string
+      enum:
+        - admin
+        - moderator
+        - member
+      description: Role of the user in the group
+
+    AddGroupMemberRequest:
+      type: object
+      required:
+        - user_id
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: ID of the user to add to the group
+        role:
+          $ref: '#/components/schemas/GroupRole'
+          default: member
+
+    UpdateGroupMemberRequest:
+      type: object
+      required:
+        - role
+      properties:
+        role:
+          $ref: '#/components/schemas/GroupRole'
+
+    JoinRequest:
+      type: object
+      required:
+        - id
+        - group_id
+        - user_id
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the join request
+        group_id:
+          type: string
+          format: uuid
+          description: ID of the group
+        user_id:
+          type: string
+          format: uuid
+          description: ID of the user requesting to join
+        status:
+          $ref: '#/components/schemas/JoinRequestStatus'
+        message:
+          type: string
+          description: Optional message from the user
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the request was created
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when the request was last updated
+
+    JoinRequestStatus:
+      type: string
+      enum:
+        - pending
+        - accepted
+        - rejected
+      description: Status of the join request
+
+    CreateJoinRequestRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Optional message to include with the join request
+
+    RespondToJoinRequestRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - accepted
+            - rejected
+          description: Response to the join request
+
+    Course:
+      type: object
+      required:
+        - id
+        - group_id
+        - title
+        - description
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the course
+        group_id:
+          type: string
+          format: uuid
+          description: ID of the group this course belongs to
+        title:
+          type: string
+          description: Title of the course
+          maxLength: 255
+        description:
+          type: string
+          description: Description of the course
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the course was created
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when the course was last updated
+
+    CreateCourseRequest:
+      type: object
+      required:
+        - title
+        - description
+      properties:
+        title:
+          type: string
+          description: Title of the course
+          maxLength: 255
+          minLength: 1
+        description:
+          type: string
+          description: Description of the course
+          minLength: 1
+
+    UpdateCourseRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Title of the course
+          maxLength: 255
+          minLength: 1
+        description:
+          type: string
+          description: Description of the course
+          minLength: 1
+
+    Material:
+      type: object
+      required:
+        - id
+        - course_id
+        - owner_id
+        - title
+        - type
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the material
+        course_id:
+          type: string
+          format: uuid
+          description: ID of the course this material belongs to
+        owner_id:
+          type: string
+          format: uuid
+          description: ID of the user who owns this material
+        title:
+          type: string
+          description: Title of the material
+          maxLength: 255
+        description:
+          type: string
+          description: Description of the material
+        content:
+          type: string
+          description: Content of the material
+        type:
+          $ref: '#/components/schemas/MaterialType'
+        url:
+          type: string
+          format: uri
+          description: URL to external resource (if applicable)
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the material was created
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when the material was last updated
+
+    MaterialType:
+      type: string
+      enum:
+        - document
+        - video
+        - link
+        - image
+        - audio
+        - other
+      description: Type of the material
+
+    CreateMaterialRequest:
+      type: object
+      required:
+        - course_id
+        - title
+        - type
+      properties:
+        course_id:
+          type: string
+          format: uuid
+          description: ID of the course this material belongs to
+        title:
+          type: string
+          description: Title of the material
+          maxLength: 255
+          minLength: 1
+        description:
+          type: string
+          description: Description of the material
+        content:
+          type: string
+          description: Content of the material
+        type:
+          $ref: '#/components/schemas/MaterialType'
+        url:
+          type: string
+          format: uri
+          description: URL to external resource (if applicable)
+
+    UpdateMaterialRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Title of the material
+          maxLength: 255
+          minLength: 1
+        description:
+          type: string
+          description: Description of the material
+        content:
+          type: string
+          description: Content of the material
+        type:
+          $ref: '#/components/schemas/MaterialType'
+        url:
+          type: string
+          format: uri
+          description: URL to external resource (if applicable)
+
+    Comment:
+      type: object
+      required:
+        - id
+        - material_id
+        - user_id
+        - content
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the comment
+        material_id:
+          type: string
+          format: uuid
+          description: ID of the material this comment belongs to
+        user_id:
+          type: string
+          format: uuid
+          description: ID of the user who created the comment
+        content:
+          type: string
+          description: Content of the comment
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the comment was created
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when the comment was last updated
+
+    CreateCommentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          description: Content of the comment
+          minLength: 1
+
+    UpdateCommentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          description: Updated content of the comment
+          minLength: 1
+
+    MaterialLabel:
+      type: object
+      required:
+        - material_id
+        - label_name
+        - created_at
+      properties:
+        material_id:
+          type: string
+          format: uuid
+          description: ID of the material
+        label_name:
+          type: string
+          description: Name of the label
+          maxLength: 50
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the label was added
+
+    AddMaterialLabelRequest:
+      type: object
+      required:
+        - label_name
+      properties:
+        label_name:
+          type: string
+          description: Name of the label to add
+          maxLength: 50
+          minLength: 1
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type or code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "validation_error"
+            message: "Invalid input parameters"
+
+    Unauthorized:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "unauthorized"
+            message: "Authentication required"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "not_found"
+            message: "Resource not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "internal_error"
+            message: "An unexpected error occurred"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication
+
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: session_token
+      description: Session cookie authentication
+
+security:
+  - BearerAuth: []
+  - CookieAuth: []
