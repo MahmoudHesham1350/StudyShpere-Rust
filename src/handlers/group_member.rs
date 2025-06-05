@@ -9,10 +9,7 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 use crate::{
-    errors::AppError,
-    models::group::Group,
-    models::group_member::GroupMember,
-    models::user::User,
+    errors::AppError, middleware::AuthenticatedUser, models::{group::Group, group_member::GroupMember, user::User}
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -91,7 +88,7 @@ pub async fn create_group_member_handler(
         .ok_or(AppError::NotFound)?;
 
     let new_group_member = GroupMember {
-        user_id: payload.user_id,
+        user_id: user.id,
         group_id,
         user_role: "member".to_string(), // Default role
         joined_at: Utc::now(),
@@ -158,6 +155,7 @@ pub async fn delete_group_member_handler(
 // Handler for /api/groups/<uuid:group_id>/members/self/
 pub async fn get_self_group_membership_handler(
     State(pool): State<Pool<Postgres>>,
+    user: AuthenticatedUser,
     Path(group_id): Path<Uuid>,
     // TODO: Extract authenticated user ID here
 ) -> Result<Json<GroupMemberResponse>, AppError> {
@@ -166,7 +164,7 @@ pub async fn get_self_group_membership_handler(
         .ok_or(AppError::NotFound)?;
 
     // Placeholder for authenticated user ID
-    let current_user_id = Uuid::new_v4(); // Replace with actual authenticated user ID
+    let current_user_id = user.id;
 
     let group_member = GroupMember::find_by_user_and_group_id(&pool, current_user_id, group_id)
         .await?
@@ -177,6 +175,7 @@ pub async fn get_self_group_membership_handler(
 
 pub async fn leave_group_membership_handler(
     State(pool): State<Pool<Postgres>>,
+    user: AuthenticatedUser,
     Path(group_id): Path<Uuid>,
     // TODO: Extract authenticated user ID here
 ) -> Result<StatusCode, AppError> {
@@ -184,14 +183,11 @@ pub async fn leave_group_membership_handler(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    // Placeholder for authenticated user ID
-    let current_user_id = Uuid::new_v4(); // Replace with actual authenticated user ID
-
-    let _group_member = GroupMember::find_by_user_and_group_id(&pool, current_user_id, group_id)
+    let _group_member = GroupMember::find_by_user_and_group_id(&pool, user.id, group_id)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    GroupMember::delete(&pool, current_user_id, group_id).await?;
+    GroupMember::delete(&pool, user.id, group_id).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

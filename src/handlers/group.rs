@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use crate::{
     errors::AppError,
     models::group::{Group, NewGroup},
+    middleware::auth::AuthenticatedUser,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -40,18 +41,20 @@ impl From<Group> for GroupResponse {
 
 pub async fn create_group_handler(
     State(pool): State<Pool<Postgres>>,
+    user: AuthenticatedUser,  // Add this parameter
     Json(payload): Json<CreateGroupRequest>,
 ) -> Result<(StatusCode, Json<GroupResponse>), AppError> {
     let new_group = NewGroup {
         name: payload.name,
         description: payload.description,
-        owner_id: Uuid::new_v4(), // Placeholder for now, will be replaced with actual user ID
+        owner_id: user.id,  // Use the authenticated user's ID
     };
 
     let group = Group::create(&pool, new_group).await?;
 
     Ok((StatusCode::CREATED, Json(group.into())))
 }
+
 
 pub async fn list_groups_handler(
     State(pool): State<Pool<Postgres>>,

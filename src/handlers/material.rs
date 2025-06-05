@@ -8,10 +8,7 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 use crate::{
-    errors::AppError,
-    models::material::{Material, NewMaterial},
-    models::material_label::MaterialLabel,
-    models::comment::{Comment, NewComment},
+    errors::AppError, middleware::AuthenticatedUser, models::{comment::{Comment, NewComment}, material::{Material, NewMaterial}, material_label::MaterialLabel}
 };
 
 // Material-related request/response DTOs
@@ -120,14 +117,16 @@ impl From<MaterialLabel> for MaterialLabelResponse {
 // Material handlers
 pub async fn create_material_handler(
     State(pool): State<Pool<Postgres>>,
+    user: AuthenticatedUser,  
     Json(payload): Json<CreateMaterialRequest>,
 ) -> Result<(StatusCode, Json<MaterialResponse>), AppError> {
+    dbg!(user.id);
     let new_material = NewMaterial {
         title: payload.title,
         file: payload.file,
         url: payload.url,
         material_type: payload.material_type,
-        owner_id: Uuid::new_v4(), // Placeholder for now, will be replaced with actual user ID
+        owner_id: user.id, // Placeholder for now, will be replaced with actual user ID
         course_id: payload.course_id,
     };
 
@@ -181,12 +180,13 @@ pub async fn delete_material_handler(
 // Comment handlers
 pub async fn create_comment_handler(
     State(pool): State<Pool<Postgres>>,
+    user: AuthenticatedUser,
     Path(material_id): Path<Uuid>,
     Json(payload): Json<CreateCommentRequest>,
 ) -> Result<(StatusCode, Json<CommentResponse>), AppError> {
     let new_comment = NewComment {
         material_id,
-        user_id: Uuid::new_v4(), // Placeholder for now, will be replaced with actual user ID
+        user_id: user.id, // Placeholder for now, will be replaced with actual user ID
         content: payload.content,
     };
 

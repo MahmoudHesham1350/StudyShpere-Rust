@@ -60,7 +60,10 @@ impl JwtManager {
     }
     
     pub fn verify_token(&self, token: &str) -> Result<TokenData<Claims>> {
-        decode::<Claims>(token, &self.decoding_key, &Validation::default())
+        let mut validation = Validation::default();
+        validation.validate_exp = true; // Enable expiration validation
+        
+        decode::<Claims>(token, &self.decoding_key, &validation)
             .map_err(Into::into)
     }
     
@@ -93,8 +96,6 @@ impl JwtManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
-    use std::time::Duration as StdDuration;
 
     #[test]
     fn test_claims_creation() {
@@ -160,7 +161,7 @@ mod tests {
     #[test]
     fn test_expired_token() {
         let user_id = Uuid::new_v4();
-        let expired_claims = Claims::new(user_id, TokenType::Access, -1); // Already expired
+        let expired_claims = Claims::new(user_id, TokenType::Access, -3); // Already expired
         
         let manager = JwtManager::new("test_secret");
         let token = manager.encode_token(&expired_claims).unwrap();

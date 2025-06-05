@@ -1,4 +1,3 @@
-use axum::Router;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use rusty_studyshpere::{db, create_app};
 

@@ -1,7 +1,7 @@
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use anyhow::Result;
-use validator::{Validate, ValidationError};
+use validator::ValidationError;
 use regex::Regex;
 
 /// Password utility functions for hashing and verification

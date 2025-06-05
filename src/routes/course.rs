@@ -1,6 +1,6 @@
 // src/routes/course.rs
 use axum::{
-    routing::{get, post, put, delete},
+    routing::get,
     Router,
 };
 use sqlx::PgPool;

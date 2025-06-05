@@ -6,6 +6,7 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
 pub struct JoinRequest {
     pub id: Uuid,
+    
     pub group_id: Uuid,
     pub user_id: Uuid,
     pub created_at: DateTime<Utc>,
