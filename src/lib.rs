@@ -15,8 +15,8 @@ use tower_http::trace::TraceLayer;
 
 pub fn create_app(pool: PgPool) -> Router {
     Router::new()
-        .nest("/api/auth", routes::auth::auth_routes(pool.clone()))
-        .nest("/api/groups", routes::group::group_routes(pool.clone()))
+        .nest("/api/auth", routes::auth::auth_routes(&pool))
+        .nest("/api/groups", routes::group::group_routes(&pool))
         
         // authenticated routes
         .nest("/api", routes::join_request::join_request_routes()

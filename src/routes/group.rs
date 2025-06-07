@@ -11,8 +11,8 @@ use crate::{
     middleware::auth::auth_middleware,
 };
 
-pub fn group_routes(pool: PgPool) -> Router<PgPool> {
+pub fn group_routes(pool: &PgPool) -> Router<PgPool> {
     Router::new()
-    .route("/", post(create_group_handler)).layer(middleware::from_fn_with_state(pool.clone(),auth_middleware))
+    .route("/", post(create_group_handler)).layer(middleware::from_fn_with_state(pool.clone(), auth_middleware))
     .merge(Router::new().route("/", get(list_groups_handler)))
 }

@@ -17,7 +17,7 @@ use crate::{
     middleware::auth::auth_middleware,
 };
 
-pub fn auth_routes(pool: PgPool) -> Router<PgPool> {
+pub fn auth_routes(pool: &PgPool) -> Router<PgPool> {
     Router::new()
         // Public routes (no authentication required)
         .route("/register", post(register_handler))
