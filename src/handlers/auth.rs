@@ -96,6 +96,8 @@ pub async fn register_handler(
         email: EmailUtils::normalize_email(&payload.email),
         username: payload.username,
         password_hash: password_hash,
+        bio: None,
+        image_url: None,
     };
 
     let user = User::create(&pool, new_user).await?;

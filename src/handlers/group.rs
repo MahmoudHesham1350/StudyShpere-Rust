@@ -5,7 +5,6 @@ use axum::{
 };
 use sqlx::{Pool, Postgres};
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -17,12 +16,12 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateGroupRequest {
     pub name: String,
+    pub join_type: String,
     pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GroupResponse {
-    pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -31,7 +30,6 @@ pub struct GroupResponse {
 impl From<Group> for GroupResponse {
     fn from(group: Group) -> Self {
         GroupResponse {
-            id: group.id,
             name: group.name,
             description: group.description,
             created_at: group.created_at,
@@ -44,10 +42,18 @@ pub async fn create_group_handler(
     user: AuthenticatedUser,  // Add this parameter
     Json(payload): Json<CreateGroupRequest>,
 ) -> Result<(StatusCode, Json<GroupResponse>), AppError> {
+    let join_type = match payload.join_type.to_lowercase().as_str() {
+        "open" => "OPEN",
+        "requests" => "REQUESTS",
+        "closed" => "CLOSED",
+        _ => return Err(AppError::ValidationError("Invalid join type".to_string()))
+    };
+    
     let new_group = NewGroup {
         name: payload.name,
         description: payload.description,
-        owner_id: user.id,  // Use the authenticated user's ID
+        owner_id: user.id,
+        join_type: join_type.to_string()
     };
 
     let group = Group::create(&pool, new_group).await?;

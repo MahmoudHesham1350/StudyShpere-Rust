@@ -7,10 +7,17 @@ use sqlx::{Pool, Postgres};
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
-
 use crate::{
-    errors::AppError, middleware::AuthenticatedUser, models::{group::Group, group_member::GroupMember, user::User}
+    errors::AppError, middleware::AuthenticatedUser,
+    models::{
+        group::Group,
+        user::User,
+        group_member::{
+            GroupMember, 
+            GroupMemberWithUser
+        }}
 };
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserResponseForGroupMember {
@@ -30,23 +37,10 @@ impl From<User> for UserResponseForGroupMember {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GroupMemberResponse {
     pub user: UserResponseForGroupMember,
-    pub user_role: String,
+    pub user_role: Option<String>,
     pub joined_at: DateTime<Utc>,
 }
 
-impl GroupMemberResponse {
-    pub async fn from_group_member(pool: &Pool<Postgres>, group_member: GroupMember) -> Result<Self, AppError> {
-        let user = User::find_by_id(pool, group_member.user_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
-
-        Ok(GroupMemberResponse {
-            user: user.into(),
-            user_role: group_member.user_role,
-            joined_at: group_member.joined_at,
-        })
-    }
-}
 
 #[derive(Debug, Deserialize)]
 pub struct CreateGroupMemberPayload {
@@ -58,136 +52,106 @@ pub struct UpdateGroupMemberPayload {
     pub user_role: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DeleteGroupMemberPayload {
+    pub user_id: Uuid,
+}
+
 pub async fn list_group_members_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_id): Path<Uuid>,
-) -> Result<Json<Vec<GroupMemberResponse>>, AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-
-    let group_members = GroupMember::find_by_group_id(&pool, group_id).await?;
-    let mut responses = Vec::new();
-    for gm in group_members {
-        responses.push(GroupMemberResponse::from_group_member(&pool, gm).await?);
-    }
-    Ok(Json(responses))
+    Path(group_name): Path<&str>,
+) -> Result<Json<Vec<GroupMemberWithUser>>, AppError> {
+    let group_members = GroupMember::find_by_group_name(&pool, group_name).await?;
+    Ok(Json(group_members))
 }
 
 pub async fn create_group_member_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_id): Path<Uuid>,
+    Path(group_name): Path<&str>,
     Json(payload): Json<CreateGroupMemberPayload>,
-) -> Result<(StatusCode, Json<GroupMemberResponse>), AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
+) -> Result<StatusCode, AppError> {
+    let _group = Group::find_by_name(&pool, group_name)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let user = User::find_by_id(&pool, payload.user_id)
+    User::find_by_id(&pool, payload.user_id)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let new_group_member = GroupMember {
-        user_id: user.id,
-        group_id,
-        user_role: "member".to_string(), // Default role
-        joined_at: Utc::now(),
-    };
+    GroupMember::create(&pool, payload.user_id, group_name.to_string()).await?;
 
-    let group_member = GroupMember::create(&pool, new_group_member).await?;
-    let response = GroupMemberResponse::from_group_member(&pool, group_member).await?;
-
-    Ok((StatusCode::CREATED, Json(response)))
+    Ok(StatusCode::CREATED)
 }
 
-pub async fn get_group_member_detail_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path((group_id, user_id)): Path<(Uuid, Uuid)>,
-) -> Result<Json<GroupMemberResponse>, AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
 
-    let group_member = GroupMember::find_by_user_and_group_id(&pool, user_id, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
 
-    Ok(Json(GroupMemberResponse::from_group_member(&pool, group_member).await?))
-}
+// TODO: Implement update_group_member_handler after implementing member types
+// pub async fn update_group_member_handler(
+//     State(pool): State<Pool<Postgres>>,
+//     Path((group_name, user_id)): Path<(&str, Uuid)>,
+//     Json(payload): Json<UpdateGroupMemberPayload>,
+// ) -> Result<Json<GroupMemberResponse>, AppError> {
+//     let _group = Group::find_by_name(&pool, group_name)
+//         .await?
+//         .ok_or(AppError::NotFound)?;
 
-pub async fn update_group_member_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path((group_id, user_id)): Path<(Uuid, Uuid)>,
-    Json(payload): Json<UpdateGroupMemberPayload>,
-) -> Result<Json<GroupMemberResponse>, AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+//     let mut group_member = GroupMember::find_by_user_and_group(&pool, user_id, group_name)
+//         .await?
+//         .ok_or(AppError::NotFound)?;
 
-    let mut group_member = GroupMember::find_by_user_and_group_id(&pool, user_id, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+//     group_member.user_role = payload.user_role;
 
-    group_member.user_role = payload.user_role;
+//     let updated_group_member = GroupMember::update(&pool, group_member).await?;
 
-    let updated_group_member = GroupMember::update(&pool, group_member).await?;
-
-    Ok(Json(GroupMemberResponse::from_group_member(&pool, updated_group_member).await?))
-}
+//     Ok(Json(GroupMemberResponse::from_group_member(&pool, updated_group_member).await?))
+// }
 
 pub async fn delete_group_member_handler(
     State(pool): State<Pool<Postgres>>,
-    Path((group_id, user_id)): Path<(Uuid, Uuid)>,
+    Path(group_name): Path<&str>,
+    Json(payload): Json<DeleteGroupMemberPayload>,
 ) -> Result<StatusCode, AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
+    let _group_member = GroupMember::find_by_user_and_group(&pool, payload.user_id, group_name)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let _group_member = GroupMember::find_by_user_and_group_id(&pool, user_id, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-
-    GroupMember::delete(&pool, user_id, group_id).await?;
+    GroupMember::delete(&pool, payload.user_id, group_name).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-// Handler for /api/groups/<uuid:group_id>/members/self/
-pub async fn get_self_group_membership_handler(
-    State(pool): State<Pool<Postgres>>,
-    user: AuthenticatedUser,
-    Path(group_id): Path<Uuid>,
-    // TODO: Extract authenticated user ID here
-) -> Result<Json<GroupMemberResponse>, AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+// // Handler for /api/groups/<uuid:group_id>/members/self/
+// pub async fn get_self_group_membership_handler(
+//     State(pool): State<Pool<Postgres>>,
+//     user: AuthenticatedUser,
+//     Path(group_name): Path<&str>,
+//     // TODO: Extract authenticated user ID here
+// ) -> Result<Json<GroupMemberResponse>, AppError> {
+//     let _group = Group::find_by_name(&pool, group_name)
+//         .await?
+//         .ok_or(AppError::NotFound)?;
 
-    // Placeholder for authenticated user ID
-    let current_user_id = user.id;
+//     // Placeholder for authenticated user ID
+//     let current_user_id = user.id;
 
-    let group_member = GroupMember::find_by_user_and_group_id(&pool, current_user_id, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+//     let group_member = GroupMember::find_by_user_and_group_id(&pool, current_user_id, group_id)
+//         .await?
+//         .ok_or(AppError::NotFound)?;
 
-    Ok(Json(GroupMemberResponse::from_group_member(&pool, group_member).await?))
-}
+//     Ok(Json(GroupMemberResponse::from_group_member(&pool, group_member).await?))
+// }
 
 pub async fn leave_group_membership_handler(
     State(pool): State<Pool<Postgres>>,
     user: AuthenticatedUser,
-    Path(group_id): Path<Uuid>,
-    // TODO: Extract authenticated user ID here
+    Path(group_name): Path<&str>,
 ) -> Result<StatusCode, AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
+
+    let _group_member = GroupMember::find_by_user_and_group(&pool, user.id, group_name)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let _group_member = GroupMember::find_by_user_and_group_id(&pool, user.id, group_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-
-    GroupMember::delete(&pool, user.id, group_id).await?;
+    GroupMember::delete(&pool, user.id, group_name).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

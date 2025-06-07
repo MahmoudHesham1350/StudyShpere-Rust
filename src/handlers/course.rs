@@ -5,20 +5,17 @@ use axum::{
 };
 use sqlx::{Pool, Postgres};
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 use crate::{
     errors::AppError,
-    models::group::Group,
-    models::course::{Course, NewCourse},
+    models::{course::{Course, NewCourse}, group::Group},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CourseResponse {
-    pub id: Uuid,
-    pub group_id: Uuid,
     pub name: String,
+    pub group_name: String,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -26,9 +23,8 @@ pub struct CourseResponse {
 impl From<Course> for CourseResponse {
     fn from(course: Course) -> Self {
         CourseResponse {
-            id: course.id,
-            group_id: course.group_id,
             name: course.name,
+            group_name: course.group_name,
             description: course.description,
             created_at: course.created_at,
         }
@@ -49,28 +45,28 @@ pub struct UpdateCoursePayload {
 
 pub async fn list_courses_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_id): Path<Uuid>,
+    Path(group_name): Path<&str>,
 ) -> Result<Json<Vec<CourseResponse>>, AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
+    let _group = Group::find_by_name(&pool, group_name)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let courses = Course::find_by_group_id(&pool, group_id).await?;
+    let courses = Course::find_by_group_name(&pool, group_name).await?;
     let responses: Vec<CourseResponse> = courses.into_iter().map(Into::into).collect();
     Ok(Json(responses))
 }
 
 pub async fn create_course_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_id): Path<Uuid>,
+    Path(group_name): Path<&str>,
     Json(payload): Json<CreateCoursePayload>,
 ) -> Result<(StatusCode, Json<CourseResponse>), AppError> {
-    let _group = Group::find_by_id(&pool, group_id)
+    let _group = Group::find_by_name(&pool, group_name)
         .await?
         .ok_or(AppError::NotFound)?;
 
     let new_course = NewCourse {
-        group_id,
+        group_name: group_name.to_string(),
         name: payload.name,
         description: payload.description,
     };
@@ -81,9 +77,10 @@ pub async fn create_course_handler(
 
 pub async fn get_course_detail_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(course_id): Path<Uuid>,
+    Path(group_name): Path<&str>,
+    Path(course_name): Path<&str>,
 ) -> Result<Json<CourseResponse>, AppError> {
-    let course = Course::find_by_id(&pool, course_id)
+    let course = Course::find_by_group_and_name(&pool, group_name, course_name)
         .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(course.into()))
@@ -91,10 +88,11 @@ pub async fn get_course_detail_handler(
 
 pub async fn update_course_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(course_id): Path<Uuid>,
+    Path(group_name): Path<&str>,
+    Path(course_name): Path<&str>,
     Json(payload): Json<UpdateCoursePayload>,
 ) -> Result<Json<CourseResponse>, AppError> {
-    let mut course = Course::find_by_id(&pool, course_id)
+    let mut course = Course::find_by_group_and_name(&pool, group_name, course_name)
         .await?
         .ok_or(AppError::NotFound)?;
 
@@ -105,18 +103,19 @@ pub async fn update_course_handler(
         course.description = Some(description);
     }
 
-    let updated_course = Course::update(&pool, course).await?;
+    let updated_course = Course::update(&pool, group_name, course_name, course).await?;
     Ok(Json(updated_course.into()))
 }
 
 pub async fn delete_course_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(course_id): Path<Uuid>,
+    Path(group_name): Path<&str>,
+    Path(course_name): Path<&str>,
 ) -> Result<StatusCode, AppError> {
-    let _course = Course::find_by_id(&pool, course_id)
+    let _course = Course::find_by_group_and_name(&pool, group_name, course_name)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    Course::delete(&pool, course_id).await?;
+    Course::delete(&pool, group_name, course_name).await?;
     Ok(StatusCode::NO_CONTENT)
 }

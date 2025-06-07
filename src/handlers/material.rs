@@ -18,7 +18,7 @@ pub struct CreateMaterialRequest {
     pub file: Option<String>,
     pub url: Option<String>,
     pub material_type: String,
-    pub course_id: Uuid,
+    pub course_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,28 +32,36 @@ pub struct UpdateMaterialRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MaterialResponse {
     pub id: Uuid,
+    pub group_name: String,
+    pub course_name: String,
+    
     pub title: String,
     pub file: Option<String>,
     pub url: Option<String>,
     pub material_type: String,
+    
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub owner_id: Uuid,
-    pub course_id: Uuid,
+    
+    pub creator_id: Uuid,
 }
 
 impl From<Material> for MaterialResponse {
     fn from(material: Material) -> Self {
         MaterialResponse {
             id: material.id,
+            group_name: material.group_name,
+            course_name: material.course_name,
+            
             title: material.title,
             file: material.file,
             url: material.url,
             material_type: material.material_type,
+            
             created_at: material.created_at,
             updated_at: material.updated_at,
-            owner_id: material.owner_id,
-            course_id: material.course_id,
+            
+            creator_id: material.creator,
         }
     }
 }
@@ -69,26 +77,26 @@ pub struct UpdateCommentRequest {
     pub content: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CommentResponse {
-    pub id: Uuid,
-    pub material_id: Uuid,
-    pub user_id: Uuid,
-    pub content: String,
-    pub created_at: DateTime<Utc>,
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct CommentResponse {
+//     pub id: Uuid,
+//     pub material_id: Uuid,
+//     pub user_id: Uuid,
+//     pub content: String,
+//     pub created_at: DateTime<Utc>,
+// }
 
-impl From<Comment> for CommentResponse {
-    fn from(comment: Comment) -> Self {
-        CommentResponse {
-            id: comment.id,
-            material_id: comment.material_id,
-            user_id: comment.user_id,
-            content: comment.content,
-            created_at: comment.created_at,
-        }
-    }
-}
+// impl From<Comment> for CommentResponse {
+//     fn from(comment: Comment) -> Self {
+//         CommentResponse {
+//             id: comment.id,
+//             material_id: comment.material_id,
+//             user_id: comment.user_id,
+//             content: comment.content,
+//             created_at: comment.created_at,
+//         }
+//     }
+// }
 
 // MaterialLabel-related request/response DTOs
 #[derive(Debug, Serialize, Deserialize)]
