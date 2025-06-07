@@ -6,27 +6,36 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
 pub struct GroupMember {
     pub user_id: Uuid,
-    pub group_id: Uuid,
-    pub user_role: String,
-    pub joined_at: DateTime<Utc>,
+    pub group_name: String,
+    pub user_role: Option<String>,
+    pub joined_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+pub struct GroupMemberWithUser {
+    pub user_id: Uuid,
+    pub group_name: String,
+    pub user_role: Option<String>,
+    pub joined_at: Option<DateTime<Utc>>,
+    pub user_email: String,
+    pub user_name: String,
 }
 
 impl GroupMember {
     pub async fn create(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        new_group_member: GroupMember,
+        user_id: Uuid,
+        group_name: String,
     ) -> Result<Self, sqlx::Error> {
         let group_member = sqlx::query_as!(
             GroupMember,
             r#"
-            INSERT INTO group_members (user_id, group_id, user_role, joined_at)
-            VALUES ($1, $2, $3, $4)
-            RETURNING user_id, group_id, user_role, joined_at as "joined_at!"
+            INSERT INTO group_members (user_id, group_name)
+            VALUES ($1, $2)
+            RETURNING user_id, group_name, user_role, joined_at as "joined_at!"
             "#,
-            new_group_member.user_id,
-            new_group_member.group_id,
-            new_group_member.user_role,
-            new_group_member.joined_at
+            user_id,
+            group_name
         )
         .fetch_one(pool)
         .await?;
@@ -34,62 +43,66 @@ impl GroupMember {
         Ok(group_member)
     }
 
-    pub async fn find_by_group_id(
+    pub async fn find_by_group_name(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_id: Uuid,
-    ) -> Result<Vec<Self>, sqlx::Error> {
-        let group_members = sqlx::query_as!(
-            GroupMember,
+        group_name: &str,
+    ) -> Result<Vec<GroupMemberWithUser>, sqlx::Error> {
+        let members = sqlx::query_as!(
+            GroupMemberWithUser,
             r#"
-            SELECT user_id, group_id, user_role, joined_at as "joined_at!"
-            FROM group_members
-            WHERE group_id = $1
-            ORDER BY joined_at DESC
+            SELECT gm.user_id, gm.group_name, gm.user_role, gm.joined_at,
+                   u.email as user_email, u.username as user_name
+            FROM group_members gm 
+            INNER JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_name = $1
+            ORDER BY gm.joined_at DESC
             "#,
-            group_id
+            group_name
         )
         .fetch_all(pool)
         .await?;
 
-        Ok(group_members)
+        Ok(members)
     }
 
-    pub async fn find_by_user_and_group_id(
+    pub async fn find_by_user_and_group(
         pool: &sqlx::Pool<sqlx::Postgres>,
         user_id: Uuid,
-        group_id: Uuid,
+        group_name: &str,
     ) -> Result<Option<Self>, sqlx::Error> {
-        let group_member = sqlx::query_as!(
+        let member = sqlx::query_as!(
             GroupMember,
             r#"
-            SELECT user_id, group_id, user_role, joined_at as "joined_at!"
+            SELECT user_id, group_name, user_role, joined_at as "joined_at!"
             FROM group_members
-            WHERE user_id = $1 AND group_id = $2
+            WHERE user_id = $1 AND group_name = $2
             "#,
             user_id,
-            group_id
+            group_name
         )
         .fetch_optional(pool)
         .await?;
 
-        Ok(group_member)
+        Ok(member)
     }
 
     pub async fn update(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_member: GroupMember,
+        user_id: Uuid,
+        group_name: &str,
+        user_role: &str,
     ) -> Result<Self, sqlx::Error> {
         let updated_group_member = sqlx::query_as!(
             GroupMember,
             r#"
             UPDATE group_members
             SET user_role = $3
-            WHERE user_id = $1 AND group_id = $2
-            RETURNING user_id, group_id, user_role, joined_at as "joined_at!"
+            WHERE user_id = $1 AND group_name = $2
+            RETURNING user_id, group_name, user_role, joined_at as "joined_at!"
             "#,
-            group_member.user_id,
-            group_member.group_id,
-            group_member.user_role
+            user_id,
+            group_name,
+            user_role
         )
         .fetch_one(pool)
         .await?;
@@ -100,15 +113,15 @@ impl GroupMember {
     pub async fn delete(
         pool: &sqlx::Pool<sqlx::Postgres>,
         user_id: Uuid,
-        group_id: Uuid,
+        group_name: &str,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             DELETE FROM group_members
-            WHERE user_id = $1 AND group_id = $2
+            WHERE user_id = $1 AND group_name = $2
             "#,
             user_id,
-            group_id
+            group_name
         )
         .execute(pool)
         .await?;

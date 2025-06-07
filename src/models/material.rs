@@ -6,6 +6,8 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
 pub struct Material {
     pub id: Uuid,
+    pub group_name: String,
+    pub course_name: String,
     pub title: String,
     pub file: Option<String>,
     pub url: Option<String>,
@@ -14,18 +16,18 @@ pub struct Material {
     pub material_type: String, // Renamed to avoid Rust keyword conflict
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub owner_id: Uuid, // Fixed to match database column name
-    pub course_id: Uuid,
+    pub creator: Uuid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewMaterial {
+    pub group_name: String,
+    pub course_name: String,
     pub title: String,
     pub file: Option<String>,
     pub url: Option<String>,
     pub material_type: String,
-    pub owner_id: Uuid,
-    pub course_id: Uuid,
+    pub creator: Uuid,
 }
 
 impl Material {
@@ -36,16 +38,17 @@ impl Material {
         let material = sqlx::query_as!(
             Material,
             r#"
-            INSERT INTO materials (title, file, url, type, owner_id, course_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", owner_id, course_id
+            INSERT INTO materials (group_name, course_name, title, file, url, type, creator)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id, group_name, course_name, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", creator
             "#,
+            new_material.group_name,
+            new_material.course_name,
             new_material.title,
             new_material.file,
             new_material.url,
             new_material.material_type,
-            new_material.owner_id,
-            new_material.course_id
+            new_material.creator
         )
         .fetch_one(pool)
         .await?;
@@ -53,19 +56,21 @@ impl Material {
         Ok(material)
     }
 
-    pub async fn find_by_course_id(
+    pub async fn find_by_course(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        course_id: Uuid,
+        group_name: &str,
+        course_name: &str,
     ) -> Result<Vec<Self>, sqlx::Error> {
         let materials = sqlx::query_as!(
             Material,
             r#"
-            SELECT id, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", owner_id, course_id
+            SELECT id, group_name, course_name, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", creator
             FROM materials
-            WHERE course_id = $1
+            WHERE group_name = $1 AND course_name = $2
             ORDER BY created_at DESC
             "#,
-            course_id
+            group_name,
+            course_name
         )
         .fetch_all(pool)
         .await?;
@@ -80,7 +85,7 @@ impl Material {
         let material = sqlx::query_as!(
             Material,
             r#"
-            SELECT id, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", owner_id, course_id
+            SELECT id, group_name, course_name, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", creator
             FROM materials
             WHERE id = $1
             "#,
@@ -106,7 +111,7 @@ impl Material {
             UPDATE materials
             SET title = $2, file = $3, url = $4, type = $5, updated_at = NOW()
             WHERE id = $1
-            RETURNING id, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", owner_id, course_id
+            RETURNING id, group_name, course_name, title, file, url, type as "material_type", created_at as "created_at!", updated_at as "updated_at!", creator
             "#,
             id,
             title,

@@ -5,27 +5,27 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
 pub struct MaterialLabel {
     pub material_id: Uuid,
-    pub label_id: Uuid,
+    pub group_name: String,
+    pub label_name: String,
     pub number: i32,
 }
 
 impl MaterialLabel {
     pub async fn create(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        material_id: Uuid,
-        label_id: Uuid,
-        number: i32,
+        material: MaterialLabel,
     ) -> Result<Self, sqlx::Error> {
         let material_label = sqlx::query_as!(
             MaterialLabel,
             r#"
-            INSERT INTO material_labels (material_id, label_id, number)
-            VALUES ($1, $2, $3)
-            RETURNING material_id, label_id, number
+            INSERT INTO material_labels (material_id, group_name, label_name, number)
+            VALUES ($1, $2, $3, $4)
+            RETURNING material_id, group_name, label_name, number
             "#,
-            material_id,
-            label_id,
-            number
+            material.material_id,
+            material.group_name,
+            material.label_name,
+            material.number
         )
         .fetch_one(pool)
         .await?;
@@ -40,7 +40,7 @@ impl MaterialLabel {
         let material_labels = sqlx::query_as!(
             MaterialLabel,
             r#"
-            SELECT material_id, label_id, number
+            SELECT *
             FROM material_labels
             WHERE material_id = $1
             ORDER BY number ASC
@@ -56,15 +56,17 @@ impl MaterialLabel {
     pub async fn delete(
         pool: &sqlx::Pool<sqlx::Postgres>,
         material_id: Uuid,
-        label_id: Uuid,
+        group_name: String,
+        label_name: String,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             DELETE FROM material_labels
-            WHERE material_id = $1 AND label_id = $2
+            WHERE material_id = $1 AND group_name = $2 AND label_name = $3
             "#,
             material_id,
-            label_id
+            group_name,
+            label_name
         )
         .execute(pool)
         .await?;

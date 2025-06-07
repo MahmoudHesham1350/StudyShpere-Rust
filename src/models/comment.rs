@@ -5,9 +5,9 @@ use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
 pub struct Comment {
-    pub id: Uuid,
+    pub id: i32,
     pub material_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: Option<Uuid>,
     pub content: String,
     pub created_at: DateTime<Utc>,
 }
@@ -15,7 +15,7 @@ pub struct Comment {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewComment {
     pub material_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: Option<Uuid>,
     pub content: String,
 }
 
@@ -63,15 +63,17 @@ impl Comment {
 
     pub async fn find_by_id(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        id: Uuid,
+        material_id: Uuid,
+        id: i32,
     ) -> Result<Option<Self>, sqlx::Error> {
         let comment = sqlx::query_as!(
             Comment,
             r#"
             SELECT id, material_id, user_id, content, created_at as "created_at!"
             FROM comments
-            WHERE id = $1
+            WHERE material_id = $1 AND id = $2
             "#,
+            material_id,
             id
         )
         .fetch_optional(pool)
@@ -82,17 +84,19 @@ impl Comment {
 
     pub async fn update(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        id: Uuid,
+        material_id: Uuid,
+        id: i32,
         content: String,
     ) -> Result<Self, sqlx::Error> {
         let updated_comment = sqlx::query_as!(
             Comment,
             r#"
             UPDATE comments
-            SET content = $2
-            WHERE id = $1
+            SET content = $3
+            WHERE material_id = $1 AND id = $2
             RETURNING id, material_id, user_id, content, created_at as "created_at!"
             "#,
+            material_id,
             id,
             content
         )
@@ -104,13 +108,15 @@ impl Comment {
 
     pub async fn delete(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        id: Uuid,
+        material_id: Uuid,
+        id: i32,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             DELETE FROM comments
-            WHERE id = $1
+            WHERE material_id = $1 AND id = $2
             "#,
+            material_id,
             id
         )
         .execute(pool)

@@ -8,9 +8,11 @@ pub struct User {
     pub id: Uuid,
     pub email: String,
     pub username: String,
+    pub bio: Option<String>,
+    pub image_url: Option<String>,
+    pub created_at: DateTime<Utc>,
     #[serde(skip_serializing)]
     pub password_hash: String,
-    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -18,6 +20,8 @@ pub struct NewUser {
     pub email: String,
     pub username: String,
     pub password_hash: String,
+    pub bio: Option<String>,
+    pub image_url: Option<String>,
 }
 
 impl User {
@@ -28,13 +32,15 @@ impl User {
         let user = sqlx::query_as!(
             User,
             r#"
-            INSERT INTO users (email, username, password_hash)
-            VALUES ($1, $2, $3)
-            RETURNING id, email, username, password_hash, created_at as "created_at!"
+            INSERT INTO users (email, username, password_hash, bio, image_url)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, email, username, password_hash, bio, image_url, created_at as "created_at!"
             "#,
             new_user.email,
             new_user.username,
-            new_user.password_hash
+            new_user.password_hash,
+            new_user.bio,
+            new_user.image_url
         )
         .fetch_one(pool)
         .await?;
@@ -49,7 +55,7 @@ impl User {
         let user = sqlx::query_as!(
             User,
             r#"
-            SELECT id, email, username, password_hash, created_at as "created_at!"
+            SELECT id, email, username, password_hash, bio, image_url, created_at as "created_at!"
             FROM users
             WHERE id = $1
             "#,
@@ -68,7 +74,7 @@ impl User {
         let user = sqlx::query_as!(
             User,
             r#"
-            SELECT id, email, username, password_hash, created_at as "created_at!"
+            SELECT id, email, username, password_hash, bio, image_url, created_at as "created_at!"
             FROM users
             WHERE email = $1
             "#,
@@ -87,7 +93,7 @@ impl User {
         let user = sqlx::query_as!(
             User,
             r#"
-            SELECT id, email, username, password_hash, created_at as "created_at!"
+            SELECT id, email, username, password_hash, bio, image_url, created_at as "created_at!"
             FROM users
             WHERE username = $1
             "#,
@@ -110,7 +116,7 @@ impl User {
             UPDATE users
             SET password_hash = $2
             WHERE id = $1
-            RETURNING id, email, username, password_hash, created_at as "created_at!"
+            RETURNING id, email, username, password_hash, bio, image_url, created_at as "created_at!"
             "#,
             id,
             new_password_hash

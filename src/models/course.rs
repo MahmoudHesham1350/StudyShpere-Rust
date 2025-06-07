@@ -1,12 +1,10 @@
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
 pub struct Course {
-    pub id: Uuid,
-    pub group_id: Uuid,
+    pub group_name: String,
     pub name: String,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -14,7 +12,7 @@ pub struct Course {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewCourse {
-    pub group_id: Uuid,
+    pub group_name: String,
     pub name: String,
     pub description: Option<String>,
 }
@@ -27,11 +25,11 @@ impl Course {
         let course = sqlx::query_as!(
             Course,
             r#"
-            INSERT INTO courses (group_id, name, description)
+            INSERT INTO courses (group_name, name, description)
             VALUES ($1, $2, $3)
-            RETURNING id, group_id, name, description, created_at as "created_at!"
+            RETURNING group_name, name, description, created_at as "created_at!"
             "#,
-            new_course.group_id,
+            new_course.group_name,
             new_course.name,
             new_course.description
         )
@@ -41,19 +39,19 @@ impl Course {
         Ok(course)
     }
 
-    pub async fn find_by_group_id(
+    pub async fn find_by_group_name(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_id: Uuid,
+        group_name: &str,
     ) -> Result<Vec<Self>, sqlx::Error> {
         let courses = sqlx::query_as!(
             Course,
             r#"
-            SELECT id, group_id, name, description, created_at as "created_at!"
+            SELECT group_name, name, description, created_at as "created_at!"
             FROM courses
-            WHERE group_id = $1
+            WHERE group_name = $1
             ORDER BY created_at DESC
             "#,
-            group_id
+            group_name
         )
         .fetch_all(pool)
         .await?;
@@ -61,18 +59,20 @@ impl Course {
         Ok(courses)
     }
 
-    pub async fn find_by_id(
+    pub async fn find_by_group_and_name(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        id: Uuid,
+        group_name: &str,
+        name: &str,
     ) -> Result<Option<Self>, sqlx::Error> {
         let course = sqlx::query_as!(
             Course,
             r#"
-            SELECT id, group_id, name, description, created_at as "created_at!"
+            SELECT group_name, name, description, created_at as "created_at!"
             FROM courses
-            WHERE id = $1
+            WHERE group_name = $1 AND name = $2
             "#,
-            id
+            group_name,
+            name
         )
         .fetch_optional(pool)
         .await?;
@@ -82,17 +82,20 @@ impl Course {
 
     pub async fn update(
         pool: &sqlx::Pool<sqlx::Postgres>,
+        group_name: &str,
+        course_name: &str,
         course: Course,
     ) -> Result<Self, sqlx::Error> {
         let updated_course = sqlx::query_as!(
             Course,
             r#"
             UPDATE courses
-            SET name = $2, description = $3
-            WHERE id = $1
-            RETURNING id, group_id, name, description, created_at as "created_at!"
+            SET name = $3, description = $4
+            WHERE group_name = $1 AND name = $2
+            RETURNING group_name, name, description, created_at as "created_at!"
             "#,
-            course.id,
+            group_name,
+            course_name,
             course.name,
             course.description
         )
@@ -104,14 +107,16 @@ impl Course {
 
     pub async fn delete(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        id: Uuid,
+        group_name: &str,
+        name: &str,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             DELETE FROM courses
-            WHERE id = $1
+            WHERE group_name = $1 AND name = $2
             "#,
-            id
+            group_name,
+            name
         )
         .execute(pool)
         .await?;
