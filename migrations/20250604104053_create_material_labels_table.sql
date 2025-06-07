@@ -1,6 +1,8 @@
 CREATE TABLE material_labels (
     material_id UUID NOT NULL REFERENCES materials(id),
-    label_id UUID NOT NULL, -- Assuming a 'labels' table will be created later
+    group_name VARCHAR(255) NOT NULL,
+    label_name VARCHAR(255) NOT NULL,
     number INTEGER NOT NULL,
-    PRIMARY KEY (material_id, label_id)
+    FOREIGN KEY (group_name, label_name) REFERENCES group_labels(group_name, name),
+    PRIMARY KEY (material_id, group_name, label_name)
 );

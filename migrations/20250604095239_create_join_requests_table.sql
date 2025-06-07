@@ -1,6 +1,6 @@
 CREATE TABLE join_requests (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    group_id UUID NOT NULL REFERENCES groups(id),
-    user_id UUID NOT NULL REFERENCES users(id),
+    group_name VARCHAR(255) REFERENCES groups(name) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (group_name, user_id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

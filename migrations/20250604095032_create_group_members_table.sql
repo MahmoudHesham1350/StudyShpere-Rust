@@ -1,7 +1,7 @@
 CREATE TABLE group_members (
     user_id UUID NOT NULL REFERENCES users(id),
-    group_id UUID NOT NULL REFERENCES groups(id),
-    user_role VARCHAR(50) NOT NULL,
+    group_name VARCHAR(255) NOT NULL REFERENCES groups(name),
+    user_role VARCHAR(50) DEFAULT 'member',
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    PRIMARY KEY (user_id, group_id)
+    PRIMARY KEY (user_id, group_name)
 );
