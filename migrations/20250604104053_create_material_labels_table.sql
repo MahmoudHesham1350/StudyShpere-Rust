@@ -1,5 +1,5 @@
 CREATE TABLE material_labels (
-    material_id UUID NOT NULL REFERENCES materials(id),
+    material_id UUID NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
     group_name VARCHAR(255) NOT NULL,
     label_name VARCHAR(255) NOT NULL,
     number INTEGER NOT NULL,
