@@ -56,16 +56,14 @@ impl MaterialLabel {
     pub async fn delete(
         pool: &sqlx::Pool<sqlx::Postgres>,
         material_id: Uuid,
-        group_name: String,
         label_name: String,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             DELETE FROM material_labels
-            WHERE material_id = $1 AND group_name = $2 AND label_name = $3
+            WHERE material_id = $1 AND label_name = $2
             "#,
             material_id,
-            group_name,
             label_name
         )
         .execute(pool)

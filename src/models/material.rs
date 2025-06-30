@@ -58,8 +58,8 @@ impl Material {
 
     pub async fn find_by_course(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
-        course_name: &str,
+        group_name: String,
+        course_name: String,
     ) -> Result<Vec<Self>, sqlx::Error> {
         let materials = sqlx::query_as!(
             Material,

@@ -45,7 +45,7 @@ impl GroupMember {
 
     pub async fn find_by_group_name(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
+        group_name: String,
     ) -> Result<Vec<GroupMemberWithUser>, sqlx::Error> {
         let members = sqlx::query_as!(
             GroupMemberWithUser,
@@ -68,7 +68,7 @@ impl GroupMember {
     pub async fn find_by_user_and_group(
         pool: &sqlx::Pool<sqlx::Postgres>,
         user_id: Uuid,
-        group_name: &str,
+        group_name: String,
     ) -> Result<Option<Self>, sqlx::Error> {
         let member = sqlx::query_as!(
             GroupMember,
@@ -89,8 +89,8 @@ impl GroupMember {
     pub async fn update(
         pool: &sqlx::Pool<sqlx::Postgres>,
         user_id: Uuid,
-        group_name: &str,
-        user_role: &str,
+        group_name: String,
+        user_role: String,
     ) -> Result<Self, sqlx::Error> {
         let updated_group_member = sqlx::query_as!(
             GroupMember,
@@ -113,7 +113,7 @@ impl GroupMember {
     pub async fn delete(
         pool: &sqlx::Pool<sqlx::Postgres>,
         user_id: Uuid,
-        group_name: &str,
+        group_name: String,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"

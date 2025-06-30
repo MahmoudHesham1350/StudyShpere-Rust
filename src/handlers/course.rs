@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     errors::AppError,
-    models::{course::{Course, NewCourse}, group::Group},
+    models,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,8 +20,8 @@ pub struct CourseResponse {
     pub created_at: DateTime<Utc>,
 }
 
-impl From<Course> for CourseResponse {
-    fn from(course: Course) -> Self {
+impl From<models::course::Course> for CourseResponse {
+    fn from(course: models::course::Course) -> Self {
         CourseResponse {
             name: course.name,
             group_name: course.group_name,
@@ -45,42 +45,42 @@ pub struct UpdateCoursePayload {
 
 pub async fn list_courses_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_name): Path<&str>,
+    Path(group_name): Path<String>,
 ) -> Result<Json<Vec<CourseResponse>>, AppError> {
-    let _group = Group::find_by_name(&pool, group_name)
+    let _group = models::group::Group::find_by_name(&pool, group_name.clone())
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let courses = Course::find_by_group_name(&pool, group_name).await?;
+    let courses = models::course::Course::find_by_group_name(&pool, group_name).await?;
     let responses: Vec<CourseResponse> = courses.into_iter().map(Into::into).collect();
     Ok(Json(responses))
 }
 
 pub async fn create_course_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_name): Path<&str>,
+    Path(group_name): Path<String>,
     Json(payload): Json<CreateCoursePayload>,
 ) -> Result<(StatusCode, Json<CourseResponse>), AppError> {
-    let _group = Group::find_by_name(&pool, group_name)
+    let _group = models::group::Group::find_by_name(&pool, group_name.clone())
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let new_course = NewCourse {
+    let new_course = models::course::NewCourse {
         group_name: group_name.to_string(),
         name: payload.name,
         description: payload.description,
     };
 
-    let course = Course::create(&pool, new_course).await?;
+    let course = models::course::Course::create(&pool, new_course).await?;
     Ok((StatusCode::CREATED, Json(course.into())))
 }
 
 pub async fn get_course_detail_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_name): Path<&str>,
-    Path(course_name): Path<&str>,
+    Path(group_name): Path<String>,
+    Path(course_name): Path<String>,
 ) -> Result<Json<CourseResponse>, AppError> {
-    let course = Course::find_by_group_and_name(&pool, group_name, course_name)
+    let course = models::course::Course::find_by_group_and_name(&pool, group_name, course_name)
         .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(course.into()))
@@ -88,11 +88,11 @@ pub async fn get_course_detail_handler(
 
 pub async fn update_course_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_name): Path<&str>,
-    Path(course_name): Path<&str>,
+    Path(group_name): Path<String>,
+    Path(course_name): Path<String>,
     Json(payload): Json<UpdateCoursePayload>,
 ) -> Result<Json<CourseResponse>, AppError> {
-    let mut course = Course::find_by_group_and_name(&pool, group_name, course_name)
+    let mut course = models::course::Course::find_by_group_and_name(&pool, group_name.clone(), course_name.clone())
         .await?
         .ok_or(AppError::NotFound)?;
 
@@ -103,19 +103,19 @@ pub async fn update_course_handler(
         course.description = Some(description);
     }
 
-    let updated_course = Course::update(&pool, group_name, course_name, course).await?;
+    let updated_course = models::course::Course::update(&pool, group_name, course_name, course).await?;
     Ok(Json(updated_course.into()))
 }
 
 pub async fn delete_course_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_name): Path<&str>,
-    Path(course_name): Path<&str>,
+    Path(group_name): Path<String>,
+    Path(course_name): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    let _course = Course::find_by_group_and_name(&pool, group_name, course_name)
+    let _course = models::course::Course::find_by_group_and_name(&pool, group_name.clone(), course_name.clone())
         .await?
         .ok_or(AppError::NotFound)?;
 
-    Course::delete(&pool, group_name, course_name).await?;
+    models::course::Course::delete(&pool, group_name, course_name).await?;
     Ok(StatusCode::NO_CONTENT)
 }

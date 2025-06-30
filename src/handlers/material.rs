@@ -8,17 +8,18 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 use crate::{
-    errors::AppError, middleware::AuthenticatedUser, models::{comment::{Comment, NewComment}, material::{Material, NewMaterial}, material_label::MaterialLabel}
+    errors::AppError, middleware::AuthenticatedUser, models
 };
 
 // Material-related request/response DTOs
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateMaterialRequest {
+    pub group_name: String,
+    pub course_name: String,
     pub title: String,
     pub file: Option<String>,
     pub url: Option<String>,
     pub material_type: String,
-    pub course_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,8 +47,8 @@ pub struct MaterialResponse {
     pub creator_id: Uuid,
 }
 
-impl From<Material> for MaterialResponse {
-    fn from(material: Material) -> Self {
+impl From<models::material::Material> for MaterialResponse {
+    fn from(material: models::material::Material) -> Self {
         MaterialResponse {
             id: material.id,
             group_name: material.group_name,
@@ -66,62 +67,6 @@ impl From<Material> for MaterialResponse {
     }
 }
 
-// Comment-related request/response DTOs
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CreateCommentRequest {
-    pub content: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UpdateCommentRequest {
-    pub content: String,
-}
-
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct CommentResponse {
-//     pub id: Uuid,
-//     pub material_id: Uuid,
-//     pub user_id: Uuid,
-//     pub content: String,
-//     pub created_at: DateTime<Utc>,
-// }
-
-// impl From<Comment> for CommentResponse {
-//     fn from(comment: Comment) -> Self {
-//         CommentResponse {
-//             id: comment.id,
-//             material_id: comment.material_id,
-//             user_id: comment.user_id,
-//             content: comment.content,
-//             created_at: comment.created_at,
-//         }
-//     }
-// }
-
-// MaterialLabel-related request/response DTOs
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CreateMaterialLabelRequest {
-    pub label_id: Uuid,
-    pub number: i32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MaterialLabelResponse {
-    pub material_id: Uuid,
-    pub label_id: Uuid,
-    pub number: i32,
-}
-
-impl From<MaterialLabel> for MaterialLabelResponse {
-    fn from(label: MaterialLabel) -> Self {
-        MaterialLabelResponse {
-            material_id: label.material_id,
-            label_id: label.label_id,
-            number: label.number,
-        }
-    }
-}
-
 // Material handlers
 pub async fn create_material_handler(
     State(pool): State<Pool<Postgres>>,
@@ -129,24 +74,26 @@ pub async fn create_material_handler(
     Json(payload): Json<CreateMaterialRequest>,
 ) -> Result<(StatusCode, Json<MaterialResponse>), AppError> {
     dbg!(user.id);
-    let new_material = NewMaterial {
-        title: payload.title,
-        file: payload.file,
-        url: payload.url,
+    let new_material = models::material::NewMaterial {
+        group_name : payload.group_name,
+        course_name : payload.course_name,
+        title : payload.title,
+        file : payload.file,
+        url : payload.url,
         material_type: payload.material_type,
-        owner_id: user.id, // Placeholder for now, will be replaced with actual user ID
-        course_id: payload.course_id,
+        creator : user.id
     };
 
-    let material = Material::create(&pool, new_material).await?;
+    let material = models::material::Material::create(&pool, new_material).await?;
     Ok((StatusCode::CREATED, Json(material.into())))
 }
 
 pub async fn list_materials_by_course_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(course_id): Path<Uuid>,
+    Path(group_name): Path<String>,
+    Path(course_name): Path<String>,
 ) -> Result<Json<Vec<MaterialResponse>>, AppError> {
-    let materials = Material::find_by_course_id(&pool, course_id).await?;
+    let materials = models::material::Material::find_by_course(&pool, group_name, course_name).await?;
     let responses: Vec<MaterialResponse> = materials.into_iter().map(Into::into).collect();
     Ok(Json(responses))
 }
@@ -155,7 +102,7 @@ pub async fn get_material_handler(
     State(pool): State<Pool<Postgres>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<MaterialResponse>, AppError> {
-    let material = Material::find_by_id(&pool, id)
+    let material = models::material::Material::find_by_id(&pool, id)
         .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(material.into()))
@@ -166,7 +113,7 @@ pub async fn update_material_handler(
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateMaterialRequest>,
 ) -> Result<Json<MaterialResponse>, AppError> {
-    let material = Material::update(
+    let material = models::material::Material::update(
         &pool,
         id,
         payload.title,
@@ -181,91 +128,7 @@ pub async fn delete_material_handler(
     State(pool): State<Pool<Postgres>>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    Material::delete(&pool, id).await?;
+    models::material::Material::delete(&pool, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-// Comment handlers
-pub async fn create_comment_handler(
-    State(pool): State<Pool<Postgres>>,
-    user: AuthenticatedUser,
-    Path(material_id): Path<Uuid>,
-    Json(payload): Json<CreateCommentRequest>,
-) -> Result<(StatusCode, Json<CommentResponse>), AppError> {
-    let new_comment = NewComment {
-        material_id,
-        user_id: user.id, // Placeholder for now, will be replaced with actual user ID
-        content: payload.content,
-    };
-
-    let comment = Comment::create(&pool, new_comment).await?;
-    Ok((StatusCode::CREATED, Json(comment.into())))
-}
-
-pub async fn list_comments_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path(material_id): Path<Uuid>,
-) -> Result<Json<Vec<CommentResponse>>, AppError> {
-    let comments = Comment::find_by_material_id(&pool, material_id).await?;
-    let responses: Vec<CommentResponse> = comments.into_iter().map(Into::into).collect();
-    Ok(Json(responses))
-}
-
-pub async fn get_comment_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<CommentResponse>, AppError> {
-    let comment = Comment::find_by_id(&pool, id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    Ok(Json(comment.into()))
-}
-
-pub async fn update_comment_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path(id): Path<Uuid>,
-    Json(payload): Json<UpdateCommentRequest>,
-) -> Result<Json<CommentResponse>, AppError> {
-    let comment = Comment::update(&pool, id, payload.content).await?;
-    Ok(Json(comment.into()))
-}
-
-pub async fn delete_comment_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path(id): Path<Uuid>,
-) -> Result<StatusCode, AppError> {
-    Comment::delete(&pool, id).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-// MaterialLabel handlers
-pub async fn create_material_label_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path(material_id): Path<Uuid>,
-    Json(payload): Json<CreateMaterialLabelRequest>,
-) -> Result<(StatusCode, Json<MaterialLabelResponse>), AppError> {
-    let material_label = MaterialLabel::create(
-        &pool,
-        material_id,
-        payload.label_id,
-        payload.number,
-    ).await?;
-    Ok((StatusCode::CREATED, Json(material_label.into())))
-}
-
-pub async fn list_material_labels_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path(material_id): Path<Uuid>,
-) -> Result<Json<Vec<MaterialLabelResponse>>, AppError> {
-    let labels = MaterialLabel::find_by_material_id(&pool, material_id).await?;
-    let responses: Vec<MaterialLabelResponse> = labels.into_iter().map(Into::into).collect();
-    Ok(Json(responses))
-}
-
-pub async fn delete_material_label_handler(
-    State(pool): State<Pool<Postgres>>,
-    Path((material_id, label_id)): Path<(Uuid, Uuid)>,
-) -> Result<StatusCode, AppError> {
-    MaterialLabel::delete(&pool, material_id, label_id).await?;
-    Ok(StatusCode::NO_CONTENT)
-}

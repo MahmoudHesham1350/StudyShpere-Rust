@@ -7,8 +7,8 @@ use sqlx::FromRow;
 pub struct Group {
     pub owner_id: Uuid,
     pub name: String,
-    pub description: Option<String>,
-    pub join_type: Option<String>,
+    pub description: String,
+    pub join_type: String,
     pub post_permission: Option<String>,
     pub edit_permissions: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -17,7 +17,7 @@ pub struct Group {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewGroup {
     pub name: String,
-    pub description: Option<String>,
+    pub description: String,
     pub owner_id: Uuid,
     pub join_type: String,
 }
@@ -64,7 +64,7 @@ impl Group {
 
     pub async fn find_by_name(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        name: &str,
+        name: String,
     ) -> Result<Option<Self>, sqlx::Error> {
         let group = sqlx::query_as!(
             Group,

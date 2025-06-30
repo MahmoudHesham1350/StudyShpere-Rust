@@ -10,10 +10,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     errors::AppError,
-    models::join_request::{JoinRequest, JoinRequestWithUser},
-    models::group::Group,
-    models::user::User,
-    models::group_member::GroupMember,
+    models,
     middleware::AuthenticatedUser,
 };
 
@@ -23,8 +20,8 @@ pub struct UserResponseForJoinRequest {
     pub username: String,
 }
 
-impl From<User> for UserResponseForJoinRequest {
-    fn from(user: User) -> Self {
+impl From<models::user::User> for UserResponseForJoinRequest {
+    fn from(user: models::user::User) -> Self {
         UserResponseForJoinRequest {
             id: user.id,
             username: user.username,
@@ -57,29 +54,29 @@ pub struct MessageResponse {
 
 pub async fn list_join_requests_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_name): Path<&str>,
-) -> Result<Json<Vec<JoinRequestWithUser>>, AppError> {
+    Path(group_name): Path<String>,
+) -> Result<Json<Vec<models::join_request::JoinRequestWithUser>>, AppError> {
     // // Check if group exists (optional, but good practice)
     // let _group = Group::find_by_name(&pool, group_name)
     //     .await?
     //     .ok_or(AppError::NotFound)?;
 
-    let join_requests = JoinRequest::find_by_group_name(&pool, group_name).await?;
+    let join_requests = models::join_request::JoinRequest::find_by_group_name(&pool, group_name).await?;
     Ok(Json(join_requests))
 }
 
 pub async fn create_join_request_handler(
     State(pool): State<Pool<Postgres>>,
-    Path(group_name): Path<&str>,
+    Path(group_name): Path<String>,
     user: AuthenticatedUser,
 ) -> Result<StatusCode, AppError> {
     // Check if group exists
-    let _group = Group::find_by_name(&pool, group_name)
+    let _group = models::group::Group::find_by_name(&pool, group_name.clone())
         .await?
         .ok_or(AppError::NotFound)?;
 
-    JoinRequest::create(&pool, JoinRequest {
-        group_name: group_name.to_string(),
+    models::join_request::JoinRequest::create(&pool, models::join_request::JoinRequest {
+        group_name: group_name,
         user_id: user.id,
         created_at: None,
     }).await?;
@@ -92,11 +89,11 @@ pub async fn respond_to_join_request_handler(
     Json(payload): Json<RespondToJoinRequestPayload>,
 ) -> Result<Json<MessageResponse>, AppError> {
     // // Verify group exists
-    // let _group = Group::find_by_name(&pool, group_name)
+    // let _group = Group::find_by_name(&pool, group_name.clone())
     //     .await?
     //     .ok_or(AppError::NotFound)?;
 
-    JoinRequest::find_by_group_and_user(&pool, payload.group_name.as_str(), payload.user_id)
+    models::join_request::JoinRequest::find_by_group_and_user(&pool, payload.group_name.clone(), payload.user_id)
         .await?
         .ok_or(AppError::NotFound)?;
 
@@ -104,12 +101,12 @@ pub async fn respond_to_join_request_handler(
         "accept" => {
             // Add user to group members (this would involve a new function in GroupMember model)
             // For now, just delete the join request
-            JoinRequest::delete(&pool, payload.group_name.as_str(), payload.user_id).await?;
-            GroupMember::create(&pool, payload.user_id, payload.group_name).await?;
+            models::join_request::JoinRequest::delete(&pool, payload.group_name.clone(), payload.user_id).await?;
+            models::group_member::GroupMember::create(&pool, payload.user_id, payload.group_name).await?;
             Ok(Json(MessageResponse { message: "User added to group".to_string() }))
         }
         "decline" => {
-            JoinRequest::delete(&pool, payload.group_name.as_str(), payload.user_id).await?;
+            models::join_request::JoinRequest::delete(&pool, payload.group_name.clone(), payload.user_id).await?;
             Ok(Json(MessageResponse { message: "Join request declined".to_string() }))
         }
         _ => Err(AppError::ValidationError("Invalid action. Must be 'accept' or 'decline'".to_string())),

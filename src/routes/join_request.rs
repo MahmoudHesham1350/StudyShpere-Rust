@@ -13,6 +13,6 @@ use crate::handlers::join_request::{
 
 pub fn join_request_routes() -> Router<PgPool> {
     Router::new()
-        .route("/groups/{group_id}/join-requests", get(list_join_requests_handler).post(create_join_request_handler))
-        .route("/groups/{group_id}/join-requests/{join_request_id}", post(respond_to_join_request_handler))
+        .route("/groups/{group_name}/join-requests", get(list_join_requests_handler).post(create_join_request_handler))
+        .route("/groups/{group_name}/join-requests/{join_request_id}", post(respond_to_join_request_handler))
 }

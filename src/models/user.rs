@@ -69,7 +69,7 @@ impl User {
 
     pub async fn find_by_email(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        email: &str,
+        email: String,
     ) -> Result<Option<Self>, sqlx::Error> {
         let user = sqlx::query_as!(
             User,
@@ -88,7 +88,7 @@ impl User {
 
     pub async fn find_by_username(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        username: &str,
+        username: String,
     ) -> Result<Option<Self>, sqlx::Error> {
         let user = sqlx::query_as!(
             User,

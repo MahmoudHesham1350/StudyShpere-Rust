@@ -22,7 +22,7 @@ pub struct JoinRequestWithUser {
 impl JoinRequest {
     pub async fn find_by_group_name(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
+        group_name: String,
     ) -> Result<Vec<JoinRequestWithUser>, sqlx::Error> {
         let join_requests = sqlx::query_as!(
             JoinRequestWithUser,
@@ -43,7 +43,7 @@ impl JoinRequest {
 
     pub async fn find_by_group_and_user(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
+        group_name: String,
         user_id: Uuid,
     ) -> Result<Option<Self>, sqlx::Error> {
         let join_request = sqlx::query_as!(
@@ -84,7 +84,7 @@ impl JoinRequest {
 
     pub async fn delete(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
+        group_name: String,
         user_id: Uuid,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(

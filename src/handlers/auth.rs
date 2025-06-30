@@ -79,22 +79,22 @@ pub async fn register_handler(
     validate_registration_input(&payload)?;
 
     // Check if user already exists
-    if User::find_by_email(&pool, &payload.email).await?.is_some() {
+    if User::find_by_email(&pool, payload.email.clone()).await?.is_some() {
         return Err(AppError::ValidationError("Email already registered".to_string()));
     }
 
-    if User::find_by_username(&pool, &payload.username).await?.is_some() {
+    if User::find_by_username(&pool, payload.username.clone()).await?.is_some() {
         return Err(AppError::ValidationError("Username already taken".to_string()));
     }
 
     // Hash password
-    let password_hash = PasswordUtils::hash_password(&payload.password)
+    let password_hash = PasswordUtils::hash_password(payload.password.as_str())
         .map_err(|e| AppError::ValidationError(format!("Password hashing failed: {}", e)))?;
 
     // Create new user
     let new_user = NewUser {
-        email: EmailUtils::normalize_email(&payload.email),
-        username: payload.username,
+        email: EmailUtils::normalize_email(payload.email.as_str()),
+        username: payload.username.clone(),
         password_hash: password_hash,
         bio: None,
         image_url: None,
@@ -129,7 +129,7 @@ pub async fn login_handler(
     }
 
     // Find user by email
-    let user = User::find_by_email(&pool, &payload.email)
+    let user = User::find_by_email(&pool, payload.email)
         .await?
         .ok_or(AppError::ValidationError("User not found".to_string()))?;
 

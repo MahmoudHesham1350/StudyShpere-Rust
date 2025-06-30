@@ -41,7 +41,7 @@ impl Course {
 
     pub async fn find_by_group_name(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
+        group_name: String,
     ) -> Result<Vec<Self>, sqlx::Error> {
         let courses = sqlx::query_as!(
             Course,
@@ -61,8 +61,8 @@ impl Course {
 
     pub async fn find_by_group_and_name(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
-        name: &str,
+        group_name: String,
+        name: String,
     ) -> Result<Option<Self>, sqlx::Error> {
         let course = sqlx::query_as!(
             Course,
@@ -82,8 +82,8 @@ impl Course {
 
     pub async fn update(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
-        course_name: &str,
+        group_name: String,
+        course_name: String,
         course: Course,
     ) -> Result<Self, sqlx::Error> {
         let updated_course = sqlx::query_as!(
@@ -107,8 +107,8 @@ impl Course {
 
     pub async fn delete(
         pool: &sqlx::Pool<sqlx::Postgres>,
-        group_name: &str,
-        name: &str,
+        group_name: String,
+        name: String,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"

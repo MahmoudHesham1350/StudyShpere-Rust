@@ -15,7 +15,7 @@ pub struct Comment {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewComment {
     pub material_id: Uuid,
-    pub user_id: Option<Uuid>,
+    pub user_id: Uuid,
     pub content: String,
 }
 
